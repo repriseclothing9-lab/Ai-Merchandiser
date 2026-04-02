@@ -1,0 +1,1553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Merchandiser</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#f0f0ed;color:#1a1a18;height:100vh;overflow:hidden}
+.app{display:grid;grid-template-columns:260px 1fr 340px;grid-template-rows:52px minmax(0,auto) minmax(0,auto) 1fr;height:100vh}
+.topbar{grid-column:1/-1;grid-row:1;background:#1a1a18;color:#f0f0ed;display:flex;align-items:center;justify-content:space-between;padding:0 20px;border-bottom:1px solid #333}
+.topbar h1{font-size:14px;font-weight:600;letter-spacing:.04em;text-transform:uppercase}
+.topbar-right{display:flex;gap:10px;align-items:center}
+.btn{font-size:12px;padding:6px 14px;border-radius:6px;border:1px solid rgba(255,255,255,.2);background:transparent;color:#f0f0ed;cursor:pointer;font-family:inherit;transition:all .15s}
+.btn:hover{background:rgba(255,255,255,.1)}
+.btn.green{background:#1a6b4a;border-color:#1a6b4a;color:#fff}
+.btn.green:hover{background:#145a3d}
+/* Orders sidebar */
+.sidebar{background:#fff;border-right:1px solid #e4e4e0;display:flex;flex-direction:column;overflow:hidden;grid-row:4;grid-column:1}
+.sidebar-search{padding:10px;border-bottom:1px solid #e4e4e0}
+.sidebar-search input{width:100%;padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:12px;font-family:inherit;outline:none;background:#f8f8f6}
+.sidebar-search input:focus{border-color:#888}
+.sidebar-filters{padding:6px 10px;border-bottom:1px solid #e4e4e0;display:flex;gap:6px}
+.filter-btn{font-size:11px;padding:3px 8px;border-radius:12px;border:1px solid #ddd;background:#f8f8f6;cursor:pointer;white-space:nowrap;color:#555}
+.filter-btn.active{background:#1a1a18;color:#fff;border-color:#1a1a18}
+.order-list{overflow-y:auto;flex:1}
+.order-item{padding:10px 12px;border-bottom:1px solid #f0f0ec;cursor:pointer;transition:background .1s}
+.order-item:hover{background:#f8f8f6}
+.order-item.selected{background:#e8f4f0;border-left:3px solid #1a6b4a}
+.order-item-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:2px}
+.flow-id{font-size:11px;font-weight:700;color:#1a6b4a}
+.order-style{font-size:12px;font-weight:600;color:#1a1a18}
+.order-meta{font-size:10px;color:#888}
+.progress-bar{height:3px;background:#e8e8e4;border-radius:2px;margin-top:6px}
+.progress-fill{height:100%;border-radius:2px;background:#1a6b4a;transition:width .3s}
+/* Main panel */
+.main{background:#f8f8f6;overflow:hidden;display:flex;flex-direction:column;grid-row:4;grid-column:2}
+.main-header{padding:14px 20px;background:#fff;border-bottom:1px solid #e4e4e0}
+.main-header h2{font-size:15px;font-weight:600;color:#1a1a18}
+.main-header p{font-size:12px;color:#888;margin-top:2px}
+.main-header-meta{display:flex;gap:16px;margin-top:8px}
+.meta-item{font-size:11px;color:#666}
+.meta-item strong{color:#1a1a18;font-weight:600}
+.tasks-grid{overflow-y:auto;flex:1;padding:16px}
+.task-section{margin-bottom:16px}
+.task-section-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#888;margin-bottom:8px;padding:0 2px}
+.tasks-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.task-card{background:#fff;border:1px solid #e4e4e0;border-radius:8px;padding:10px 12px;cursor:pointer;transition:all .15s;position:relative}
+.task-card:hover{border-color:#aaa;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+.task-card.done{background:#f0f9f5;border-color:#a8dcc5}
+.task-card.pending{border-style:dashed;border-color:#ccc;background:#fafaf8}
+.task-name{font-size:11px;font-weight:600;color:#1a1a18;margin-bottom:4px;line-height:1.3}
+.task-card.done .task-name{color:#0f5c3a}
+.task-date{font-size:10px;color:#888}
+.task-card.done .task-date{color:#1a8a57;font-weight:500}
+.task-check{position:absolute;top:8px;right:8px;width:16px;height:16px;border-radius:50%;border:1.5px solid #ccc;background:#fff;display:flex;align-items:center;justify-content:center;font-size:9px;cursor:pointer}
+.task-card.done .task-check{background:#1a6b4a;border-color:#1a6b4a;color:#fff}
+.empty-main{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;color:#aaa;font-size:13px}
+.empty-main p{margin-top:8px}
+/* Chat panel */
+.chat-panel{background:#fff;border-left:1px solid #e4e4e0;display:flex;flex-direction:column;overflow:hidden;grid-row:4;grid-column:3}
+.chat-header{padding:12px 16px;border-bottom:1px solid #e4e4e0;background:#1a1a18}
+.chat-header p{font-size:13px;font-weight:600;color:#f0f0ed}
+.chat-header span{font-size:11px;color:#888}
+.chat-messages{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px}
+.msg{max-width:90%}
+.msg.user{align-self:flex-end}
+.msg.assistant{align-self:flex-start}
+.msg-bubble{padding:8px 12px;border-radius:12px;font-size:12px;line-height:1.5}
+.msg.user .msg-bubble{background:#1a1a18;color:#f0f0ed;border-bottom-right-radius:3px}
+.msg.assistant .msg-bubble{background:#f0f0ed;border:1px solid #e4e4e0;border-bottom-left-radius:3px;color:#1a1a18}
+.msg-time{font-size:10px;color:#bbb;margin-top:2px;padding:0 3px}
+.msg.user .msg-time{text-align:right}
+.typing-dots{display:flex;gap:3px;padding:10px 14px;background:#f0f0ed;border:1px solid #e4e4e0;border-radius:12px;border-bottom-left-radius:3px;width:fit-content}
+.typing-dots span{width:5px;height:5px;border-radius:50%;background:#888;animation:bounce 1.1s infinite}
+.typing-dots span:nth-child(2){animation-delay:.18s}
+.typing-dots span:nth-child(3){animation-delay:.36s}
+@keyframes bounce{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-4px)}}
+.chat-input-wrap{padding:10px;border-top:1px solid #e4e4e0;display:flex;gap:8px;align-items:flex-end}
+.chat-input{flex:1;font-size:12px;padding:8px 10px;border-radius:8px;border:1px solid #ddd;background:#f8f8f6;color:#1a1a18;font-family:inherit;outline:none;resize:none;min-height:34px;max-height:80px;line-height:1.4}
+.chat-input:focus{border-color:#555}
+.send-btn{width:34px;height:34px;border-radius:50%;border:none;background:#1a1a18;color:#f0f0ed;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+.send-btn:hover{background:#333}
+.send-btn:disabled{opacity:.3;cursor:default}
+.hint-pills{padding:6px 10px 0;display:flex;flex-wrap:wrap;gap:4px}
+.hint-pill{font-size:10px;padding:3px 8px;border-radius:12px;border:1px solid #ddd;background:#f8f8f6;cursor:pointer;color:#555;transition:background .1s}
+.hint-pill:hover{background:#e8e8e4}
+.mic-btn{width:34px;height:34px;border-radius:50%;border:1px solid #ddd;background:#f8f8f6;color:#555;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;transition:all .2s;position:relative}
+.mic-btn:hover{background:#e4e4e0}
+.mic-btn.listening{background:#e53e3e;color:#fff;animation:pulse-mic 1s infinite}
+.mic-btn.listening::after{content:'';position:absolute;inset:-4px;border-radius:50%;border:2px solid #e53e3e;animation:ring-out 1s infinite}
+@keyframes pulse-mic{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
+@keyframes ring-out{0%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(1.5)}}
+.voice-status{font-size:10px;color:#e53e3e;padding:4px 12px;display:none;align-items:center;gap:4px}
+.voice-status.active{display:flex}
+.voice-dot{width:6px;height:6px;border-radius:50%;background:#e53e3e;animation:pulse-mic .8s infinite}
+
+/* Sync panel */
+.sync-banner{background:#1a1a18;color:#f0f0ed;padding:8px 20px;grid-column:1/-1;grid-row:2;align-items:center;gap:10px;font-size:12px;border-bottom:1px solid #333}
+.sync-dot{width:8px;height:8px;border-radius:50%;background:#666;flex-shrink:0}
+.sync-dot.connected{background:#22c55e;box-shadow:0 0 6px #22c55e}
+.sync-dot.connecting{background:#f59e0b;animation:pulse-mic .8s infinite}
+.sync-setup{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:999;display:flex;align-items:center;justify-content:center}
+.sync-card{background:#fff;border-radius:12px;padding:28px 32px;width:480px;max-width:95vw}
+.sync-card h2{font-size:16px;font-weight:600;margin-bottom:6px}
+.sync-card p{font-size:13px;color:#666;line-height:1.6;margin-bottom:16px}
+.sync-steps{counter-reset:step;margin-bottom:20px}
+.sync-step{counter-increment:step;display:flex;gap:10px;margin-bottom:10px;font-size:12px;line-height:1.5;color:#444}
+.sync-step::before{content:counter(step);background:#1a1a18;color:#fff;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0;margin-top:1px}
+.sync-input{width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:6px;font-size:12px;font-family:monospace;margin-bottom:8px;outline:none}
+.sync-input:focus{border-color:#1a1a18}
+.sync-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
+.sync-btn{font-size:13px;padding:8px 18px;border-radius:6px;border:1px solid #ddd;background:#fff;cursor:pointer;font-family:inherit}
+.sync-btn.primary{background:#1a1a18;color:#fff;border-color:#1a1a18}
+.sync-btn.primary:hover{background:#333}
+.sync-btn:hover{background:#f5f5f5}
+.sync-tag{font-size:10px;padding:2px 7px;border-radius:10px;background:#e8f5e9;color:#2e7d32;font-weight:600;margin-left:6px}
+.sync-tag.warn{background:#fff3e0;color:#e65100}
+
+/* Module tabs */
+.module-tabs{grid-column:1/-1;grid-row:3;background:#fff;border-bottom:1px solid #e4e4e0;display:flex;align-items:center;padding:0 20px;gap:2px}
+.tab-btn{font-size:13px;font-weight:500;padding:10px 18px;border:none;background:transparent;cursor:pointer;color:#888;border-bottom:2px solid transparent;transition:all .15s;font-family:inherit}
+.tab-btn:hover{color:#1a1a18}
+.tab-btn.tab-active{color:#1a6b4a;border-bottom-color:#1a6b4a}
+/* Samples view */
+.samples-view{grid-column:1/3;grid-row:4;background:#f8f8f6;display:flex;flex-direction:column;overflow:hidden}
+.s-header{background:#fff;border-bottom:1px solid #e4e4e0;padding:12px 16px;flex-shrink:0}
+.s-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}
+.s-stat{background:#f8f8f6;border-radius:8px;padding:8px 10px;text-align:center}
+.s-stat-n{font-size:20px;font-weight:600}
+.s-stat-l{font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.04em}
+.s-toolbar{display:flex;gap:8px;margin-bottom:8px}
+.s-search{flex:1;padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:12px;font-family:inherit;outline:none;background:#f8f8f6}
+.s-add-btn{font-size:12px;padding:6px 14px;border-radius:6px;border:none;background:#1a6b4a;color:#fff;cursor:pointer;font-family:inherit;white-space:nowrap}
+.s-add-btn:hover{background:#145a3d}
+.s-filters{display:flex;gap:4px;flex-wrap:wrap}
+.s-filter{font-size:10px;padding:3px 8px;border-radius:10px;border:1px solid #ddd;background:#f8f8f6;cursor:pointer;color:#666;white-space:nowrap;font-family:inherit}
+.s-filter:hover,.s-filter-active{background:#1a1a18;color:#fff;border-color:#1a1a18}
+.s-list{overflow-y:auto;flex:1;padding:12px}
+.s-card{background:#fff;border:1px solid #e4e4e0;border-radius:10px;padding:12px 14px;margin-bottom:8px;transition:box-shadow .15s}
+.s-card:hover{box-shadow:0 1px 6px rgba(0,0,0,.07)}
+.s-card-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px}
+.s-name{font-size:13px;font-weight:600;color:#1a1a18;margin-bottom:2px}
+.s-meta{font-size:11px;color:#888}
+.s-card-bottom{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.s-status-badge{font-size:11px;padding:3px 9px;border-radius:10px;font-weight:500;display:flex;align-items:center;white-space:nowrap}
+.s-status-sel{font-size:11px;padding:3px 6px;border:1px solid #ddd;border-radius:6px;background:#fff;cursor:pointer;font-family:inherit;color:#555}
+.s-date{font-size:10px;color:#aaa;margin-left:auto}
+.s-notes{font-size:11px;color:#888;font-style:italic}
+.s-sent-toggle{font-size:11px;padding:4px 10px;border-radius:6px;border:1px dashed #ccc;cursor:pointer;color:#888;background:#fafaf8;transition:all .15s}
+.s-sent-toggle.sent{background:#f0fdf4;border-color:#a8dcc5;color:#1a6b4a;border-style:solid;font-weight:500}
+.s-del{background:none;border:none;cursor:pointer;color:#ddd;font-size:13px;padding:2px 5px;border-radius:4px}
+.s-del:hover{color:#e53e3e;background:#fff0f0}
+.s-empty{text-align:center;padding:40px 20px;color:#aaa;font-size:13px}
+.s-form{background:#fff;border:1px solid #e4e4e0;border-radius:10px;padding:16px;margin:0 12px 12px;flex-shrink:0}
+.s-form-title{font-size:13px;font-weight:600;margin-bottom:12px}
+.s-form-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+.s-label{font-size:10px;font-weight:600;color:#777;display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:.04em}
+.s-input{width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:12px;font-family:inherit;outline:none;background:#fff}
+.s-input:focus{border-color:#1a1a18}
+.s-form-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
+.s-btn{font-size:12px;padding:6px 16px;border-radius:6px;border:1px solid #ddd;background:#fff;cursor:pointer;font-family:inherit}
+.s-btn:hover{background:#f5f5f5}
+.s-btn-primary{background:#1a1a18;color:#fff;border-color:#1a1a18}
+.s-btn-primary:hover{background:#333}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="topbar">
+    <h1>&#9679; AI Merchandiser</h1>
+    <div class="topbar-right">
+      <span id="statsLabel" style="font-size:11px;color:#888"></span><span id="saveIndicator" style="font-size:10px;color:#4a9;display:none">✓ Saved</span>
+      <button class="btn" onclick="clearData()" style="opacity:.6;font-size:11px">Reset</button><button class="btn green" onclick="exportExcel()">Export Excel</button>
+    </div>
+  </div>
+
+  <!-- Sync Banner -->
+  <div class="sync-banner" id="syncBanner" style="grid-column:1/-1;grid-row:2;display:none">
+    <span class="sync-dot" id="syncDot"></span>
+    <span id="syncStatus">Not connected</span>
+    <span id="syncTag" class="sync-tag warn">LOCAL ONLY</span>
+    <span style="flex:1"></span>
+    <button class="btn" style="font-size:11px;padding:3px 10px" onclick="manualSync()">&#8635; Sync Now</button><button class="btn" style="font-size:11px;padding:3px 10px" onclick="showSyncSetup()">Configure Sync</button>
+  </div>
+
+  <!-- Sync Setup Modal -->
+  <div class="sync-setup" id="syncSetup" style="display:none">
+    <div class="sync-card">
+      <h2>Connect Google Sheets</h2>
+      <p style="font-size:13px;color:#666;line-height:1.6;margin-bottom:16px">Free sync — your whole team sees every update. New orders added in Sheets appear in the app automatically.</p>
+      <div id="gsSetupSteps">
+        <div class="sync-steps">
+          <div class="sync-step">Go to <strong>sheets.google.com</strong> → New spreadsheet → name it <em>AI Merchandiser</em></div>
+          <div class="sync-step">Menu: <strong>Extensions → Apps Script</strong> → delete existing code → paste the <code>apps_script.js</code> → click Save</div>
+          <div class="sync-step">Click <strong>Deploy → New deployment → Web App</strong> → Execute as: <em>Me</em> → Who has access: <em>Anyone</em> → Deploy → Authorize → Copy the URL</div>
+          <div class="sync-step">Paste the URL below — the app pushes all 47 orders to your sheet automatically</div>
+        </div>
+        <label style="font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:4px">Web App URL</label>
+        <input class="sync-input" id="gsUrlInput" placeholder="https://script.google.com/macros/s/.../exec" />
+        <label style="font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:4px;margin-top:10px">Your name</label>
+        <input class="sync-input" id="gsNameInput" placeholder="e.g. Tejveer, Kunal..." />
+        <div style="font-size:11px;color:#888;margin-top:8px">The Web App URL is shared with the whole team — everyone pastes the same URL.</div>
+        <div class="sync-actions">
+          <button class="sync-btn" onclick="document.getElementById('syncSetup').style.display='none'">Cancel</button>
+          <button class="sync-btn primary" id="gsConnectBtn" onclick="connectGoogleSheets()">Connect &amp; Push Data</button>
+        </div>
+      </div>
+      <div id="gsSetupDone" style="display:none;text-align:center;padding:8px 0">
+        <div style="font-size:36px;margin-bottom:8px">✅</div>
+        <div style="font-size:14px;font-weight:600;margin-bottom:6px">Connected to Google Sheets!</div>
+        <div style="font-size:12px;color:#666;margin-bottom:16px" id="gsSheetInfo">All orders synced.</div>
+        <button class="sync-btn primary" style="width:100%" onclick="document.getElementById('syncSetup').style.display='none'">Done</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- Module Tabs -->
+  <div class="module-tabs">
+    <button id="tabOrders" class="tab-btn tab-active" onclick="switchModule('orders')">&#128203; Orders</button>
+    <button id="tabSamples" class="tab-btn" onclick="switchModule('samples')">&#129525; Samples</button>
+  </div>
+
+  <!-- Samples View -->
+  <div id="samplesView" class="samples-view" style="display:none"></div>
+
+  <!-- Orders View -->
+  <div id="ordersView" style="display:contents">
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sidebar-search">
+      <input id="searchInput" placeholder="Search style, buyer, flow ID..." oninput="renderOrderList()">
+    </div>
+    <div class="sidebar-filters">
+      <button class="filter-btn active" onclick="setFilter('all',this)">All</button>
+      <button class="filter-btn" onclick="setFilter('OWND',this)">OWND</button>
+      <button class="filter-btn" onclick="setFilter('MUFTI',this)">MUFTI</button>
+      <button class="filter-btn" onclick="setFilter('COBB',this)">COBB</button>
+      <button class="filter-btn" onclick="setFilter('STYLI',this)">STYLI</button>
+    </div>
+    <div class="order-list" id="orderList"></div>
+  </div>
+
+  <!-- Main panel -->
+  <div class="main" id="mainPanel">
+    <div class="empty-main" style="display:flex">
+      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+      <p>Select an order to view activities</p>
+    </div>
+  </div>
+  </div><!-- /ordersView -->
+
+  <!-- Chat -->
+  <div class="chat-panel">
+    <div class="chat-header">
+      <p>AI Assistant</p>
+      <span>Tell me when you complete a task</span>
+    </div>
+    <div class="hint-pills" id="hintPills">
+      <span class="hint-pill" onclick="fillHint('New order: NOVA style, Navy color, OWND buyer, 600 pcs, ex-factory August 20')">+ New order</span>
+      <span class="hint-pill" onclick="fillHint('Fabric order completed for SKYLAR Black')">Fabric order — SKYLAR</span>
+      <span class="hint-pill" onclick="fillHint('Cutting done for Vic Charcoal')">Cutting — Vic</span>
+      <span class="hint-pill" onclick="fillHint('PP Sample dispatched for style 2601')">PP Sample — 2601</span>
+      <span class="hint-pill" onclick="fillHint('Labdips approved for Gwen Brown')">Labdips — Gwen</span>
+    </div>
+    <div class="chat-messages" id="chatMessages">
+      <div class="msg assistant">
+        <div class="msg-bubble">Hey! I'm your AI Merchandiser — works fully offline too. I can:<br><br>
+        <strong>Complete a task:</strong> <em>"Labdips done for SKYLAR Black"</em><br>
+        <strong>Whole section:</strong> <em>"All material and trims done for Vic Charcoal"</em><br>
+        <strong>New order:</strong> <em>"New order — NOVA, Navy, OWND, 800 pcs, ex-factory Sept 15"</em><br><br>
+        Type or tap the mic 🎙</div>
+        <div class="msg-time">now</div>
+      </div>
+    </div>
+    <div id="typingWrap" style="display:none;padding:0 12px 4px">
+      <div class="typing-dots"><span></span><span></span><span></span></div>
+    </div>
+    <div id="voiceStatus" class="voice-status"><span class="voice-dot"></span> <span id="voiceStatusText">Listening — speak now...</span></div>
+    <div class="chat-input-wrap">
+      <button class="mic-btn" id="micBtn" onclick="toggleVoice()" title="Click to speak">
+        <svg id="micIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+          <line x1="12" y1="19" x2="12" y2="23"/>
+          <line x1="8" y1="23" x2="16" y2="23"/>
+        </svg>
+      </button>
+      <textarea class="chat-input" id="chatInput" placeholder="Type or click mic to speak..." rows="1"></textarea>
+      <button class="send-btn" id="sendBtn" onclick="sendMessage()">↑</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const TASK_COLS = ['Fabric Order','Trims Order','Trims Approval','Trims Payment','Labdips','Bulk Fabric In-house','Fit Sample Indent','Fit Sample Dispatch','Fit Sample Approval','Trims In-House','PP Sample Indent','PP Sample Dispatch','FPT Approval','PP Sample Recieve','GPT Indent To Testing Agency','GPT Approval','PP Sample Approval','Cutting','Sewing','Inline Inspection','Finishing','Packing','Final Inspection','Shipment Sample Dispatch','Shipment Sample Approval','Ex-Factory'];
+
+const TASK_GROUPS = {
+  'Material & Trims': ['Fabric Order','Trims Order','Trims Approval','Trims Payment','Labdips','Bulk Fabric In-house','Trims In-House'],
+  'Sampling': ['Fit Sample Indent','Fit Sample Dispatch','Fit Sample Approval','PP Sample Indent','PP Sample Dispatch','PP Sample Recieve','FPT Approval','GPT Indent To Testing Agency','GPT Approval','PP Sample Approval'],
+  'Production': ['Cutting','Sewing','Inline Inspection','Finishing','Packing','Final Inspection'],
+  'Shipment': ['Shipment Sample Dispatch','Shipment Sample Approval','Ex-Factory']
+};
+
+const ORDERS_DATA = [{"flowId": "1082", "po": "70060096.0", "style": "SKYLAR", "color": "Black", "product": "JOGGERS", "buyer": "STYLI WOMEN GCC", "season": "SS26", "qty": 170, "deadline": "2026-04-05", "exFactory": "2026-04-05", "merchant": "KUNAL VERMA", "tasks": {"Fabric Order": null, "Trims Order": null, "Trims Approval": null, "Trims Payment": null, "Labdips": null, "Bulk Fabric In-house": null, "Fit Sample Indent": null, "Fit Sample Dispatch": null, "Fit Sample Approval": null, "Trims In-House": null, "PP Sample Indent": null, "PP Sample Dispatch": null, "FPT Approval": null, "PP Sample Recieve": null, "GPT Indent To Testing Agency": null, "GPT Approval": null, "PP Sample Approval": null, "Cutting": null, "Sewing": null, "Inline Inspection": null, "Finishing": null, "Packing": null, "Final Inspection": null, "Shipment Sample Dispatch": null, "Shipment Sample Approval": null, "Ex-Factory": "2026-04-05 05:30"}}, {"flowId": "1081", "po": "70060096.0", "style": "Gwen", "color": "Brown", "product": "JOGGERS", "buyer": "STYLI WOMEN GCC", "season": "SS26", "qty": 421, "deadline": "2026-04-05", "exFactory": "2026-04-05", "merchant": "KUNAL VERMA", "tasks": {"Fabric Order": null, "Trims Order": null, "Trims Approval": null, "Trims Payment": null, "Labdips": null, "Bulk Fabric In-house": null, "Fit Sample Indent": null, "Fit Sample Dispatch": null, "Fit Sample Approval": null, "Trims In-House": null, "PP Sample Indent": null, "PP Sample Dispatch": null, "FPT Approval": null, "PP Sample Recieve": null, "GPT Indent To Testing Agency": null, "GPT Approval": null, "PP Sample Approval": null, "Cutting": null, "Sewing": null, "Inline Inspection": null, "Finishing": null, "Packing": null, "Final Inspection": null, "Shipment Sample Dispatch": null, "Shipment Sample Approval": null, "Ex-Factory": "2026-04-05 05:30"}}, {"flowId": "1077", "po": "893409530.0", "style": "Vic", "color": "CHARCOAL", "product": "Jacket", "buyer": "OWND", "season": "AW26", "qty": 1200, "deadline": "2026-07-10", "exFactory": "2026-07-03", "merchant": "", "tasks": {"Fabric Order": null, "Trims Order": null, "Trims Approval": null, "Trims Payment": null, "Labdips": null, "Bulk Fabric In-house": null, "Fit Sample Indent": null, "Fit Sample Dispatch": null, "Fit Sample Approval": null, "Trims In-House": null, "PP Sample Indent": null, "PP Sample Dispatch": null, "FPT Approval": null, "PP Sample Recieve": null, "GPT Indent To Testing Agency": null, "GPT Approval": null, "PP Sample Approval": null, "Cutting": null, "Sewing": null, "Inline Inspection": null, "Finishing": null, "Packing": null, "Final Inspection": null, "Shipment Sample Dispatch": null, "Shipment Sample Approval": null, "Ex-Factory": "2026-07-10 05:30"}}, {"flowId": "1076", "po": "893409530.0", "style": "SHERLOCK", "color": "TAUPE ", "product": "SHACKET", "buyer": "OWND", "season": "AW26", "qty": 400, "deadline": "2026-08-07", "exFactory": "2026-07-29", "merchant": "", "tasks": {"Fabric Order": null, "Trims Order": null, "Trims Approval": null, "Trims Payment": null, "Labdips": null, "Bulk Fabric In-house": null, "Fit Sample Indent": null, "Fit Sample Dispatch": null, "Fit Sample Approval": null, "Trims In-House": null, "PP Sample Indent": null, "PP Sample Dispatch": null, "FPT Approval": null, "PP Sample Recieve": null, "GPT Indent To Testing Agency": null, "GPT Approval": null, "PP Sample Approval": null, "Cutting": null, "Sewing": null, "Inline Inspection": null, "Finishing": null, "Packing": null, "Final Inspection": null, "Shipment Sample Dispatch": null, "Shipment Sample Approval": null, "Ex-Factory": "2026-08-07 05:30"}}, {"flowId": "1075", "po": "893409530.0", "style": "SUAVE ", "color": "PEACOCK", "product": "Jacket", "buyer": "OWND", "season": "AW26", "qty": 900, "deadline": "2026-08-21", "exFactory": "2026-08-11", "merchant": "", "tasks": {"Fabric Order": null, "Trims Order": null, "Trims Approval": null, "Trims Payment": null, "Labdips": null, "Bulk Fabric In-house": null, "Fit Sample Indent": null, "Fit Sample Dispatch": null, "Fit Sample Approval": null, "Trims In-House": null, "PP Sample Indent": null, "PP Sample Dispatch": null, "FPT Approval": null, "PP Sample Recieve": null, "GPT Indent To Testing Agency": null, "GPT Approval": null, "PP Sample Approval": null, "Cutting": null, "Sewing": null, "Inline Inspection": null, "Finishing": null, "Packing": null, "Final Inspection": null, "Shipment Sample Dispatch": null, "Shipment Sample Approval": null, "Ex-Factory": "2026-08-21 05:30"}}, {"flowId": "1074", "po": "893409530.0", "style": "GRAHAM ", "color": "DARK COFFEE", "product": "SHACKET", "buyer": "OWND", "season": "AW26", "qty": 1200, "deadline": "2026-08-07", "exFactory": "2026-07-29", "merchant": "", "tasks": {"Fabric Order": null, "Trims Order": null, "Trims Approval": null, "Trims Payment": null, "Labdips": null, "Bulk Fabric In-house": null, "Fit Sample Indent": null, "Fit Sample Dispatch": null, "Fit Sample Approval": null, "Trims In-House": null, "PP Sample Indent": null, "PP Sample Dispatch": null, "FPT Approval": null, "PP Sample Recieve": null, "GPT Indent To Testing Agency": null, "GPT Approval": null, "PP Sample Approval": null, "Cutting": null, "Sewing": null, "Inline Inspection": null, "Finishing": null, "Packing": null, "Final Inspection": null, "Shipment Sample Dispatch": null, "Shipment Sample Approval": null, "Ex-Factory": "2026-08-07 05:30"}}, {"flowId": "1073", "po": "893409530.0", "style": "DON SUEDE", "color": "DARK OLIVE ", "product": "Jacket", "buyer": "OWND", "season": "AW26", "qty": 1500, "deadline": "2026-07-24", "exFactory": "2026-07-16", "merchant": "", "tasks": {"Fabric Order": null, "Trims Order": null, "Trims Approval": null, "Trims Payment": null, "Labdips": null, "Bulk Fabric In-house": null, "Fit Sample Indent": null, "Fit Sample Dispatch": null, "Fit Sample Approval": null, "Trims In-House": null, "PP Sample Indent": null, "PP Sample Dispatch": null, "FPT Approval": null, "PP Sample Recieve": null, "GPT Indent To Testing Agency": null, "GPT Approval": null, "PP Sample Approval": null, "Cutting": null, "Sewing": null, "Inline Inspection": null, "Finishing": null, "Packing": null, "Final Inspection": null, "Shipment Sample Dispatch": null, "Shipment Sample Approval": null, "Ex-Factory": "2026-07-24 05:30"}}, {"flowId": "1072", "po": "893409530.0", "style": "SUAVE ", "color": "NEW FAWN ", "product": "Jacket", "buyer": "OWND", "season": "AW26", "qty": 1500, "deadline": "2026-08-07", "exFactory": "2026-07-29", "merchant": "", "tasks": {"Fabric Order": null, "Trims Order": null, "Trims Approval": null, "Trims Payment": null, "Labdips": null, "Bulk Fabric In-house": null, "Fit Sample Indent": null, "Fit Sample Dispatch": null, "Fit Sample Approval": null, "Trims In-House": null, "PP Sample Indent": null, "PP Sample Dispatch": null, "FPT Approval": null, "PP Sample Recieve": null, "GPT Indent To Testing Agency": null, "GPT Approval": null, "PP Sample Approval": null, "Cutting": null, "Sewing": null, "Inline Inspection": null, "Finishing": null, "Packing": null, "Final Inspection": null, "Shipment Sample Dispatch": null, "Shipment Sample Approval": null, "Ex-Factory": "2026-08-07 05:30"}}, {"flowId": "1071", "po": "893409530.0", "style": "STREAK", "color": "TBD", "product": "SWEATSHIRTS", "buyer": "OWND", "season": "AW26", "qty": 1200, "deadline": "2026-08-07", "exFactory": "2026-07-29", "merchant": "", "tasks": {"Fabric Order": null, "Trims Order": null, "Trims Approval": null, "Trims Payment": null, "Labdips": null, "Bulk Fabric In-house": null, "Fit Sample Indent": null, "Fit Sample Dispatch": null, "Fit Sample Approval": null, "Trims In-House": null, "PP Sample Indent": null, "PP Sample Dispatch": null, "FPT Approval": null, "PP Sample Recieve": null, "GPT Indent To Testing Agency": null, "GPT Approval": null, "PP Sample Approval": null, "Cutting": null, "Sewing": null, "Inline Inspection": null, "Finishing": null, "Packing": null, "Final Inspection": null, "Shipment Sample Dispatch": null, "Shipment Sample Approval": null, "Ex-Factory": "2026-08-07 05:30"}}, {"flowId": "1070", "po": "893409530.0", "style": "FIGHTER ", "color": "BLACK ", "product": "Jacket", "buyer": "OWND", "season": "AW26", "qty": 1200, "deadline": "2026-07-24", "exFactory": "2026-07-16", "merchant": "", "tasks": {"Fabric Order": null, "Trims Order": null, "Trims Approval": null, "Trims Payment": null, "Labdips": null, "Bulk Fabric In-house": null, "Fit Sample Indent": null, "Fit Sample Dispatch": null, "Fit Sample Approval": null, "Trims In-House": null, "PP Sample Indent": null, "PP Sample Dispatch": null, "FPT Approval": null, "PP Sample Recieve": null, "GPT Indent To Testing Agency": null, "GPT Approval": null, "PP Sample Approval": null, "Cutting": null, "Sewing": null, "Inline Inspection": null, "Finishing": null, "Packing": null, "Final Inspection": null, "Shipment Sample Dispatch": null, "Shipment Sample Approval": null, "Ex-Factory": "2026-07-24 05:30"}}, {"flowId": "1069", "po": "893409530.0", "style": "SHERLOCK", "color": "GREY MELANGE ", "product": "SHACKET", "buyer": "OWND", "season": "AW26", "qty": 400, "deadline": "2026-08-07", "exFactory": "2026-07-29", "merchant": "", "tasks": {"Fabric Order": null, "Trims Order": null, "Trims Approval": null, "Trims Payment": null, "Labdips": null, "Bulk Fabric In-house": null, "Fit Sample Indent": null, "Fit Sample Dispatch": null, "Fit Sample Approval": null, "Trims In-House": null, "PP Sample Indent": null, "PP Sample Dispatch": null, "FPT Approval": null, "PP Sample Recieve": null, "GPT Indent To Testing Agency": null, "GPT Approval": null, "PP Sample Approval": null, "Cutting": null, "Sewing": null, "Inline Inspection": null, "Finishing": null, "Packing": null, "Final Inspection": null, "Shipment Sample Dispatch": null, "Shipment Sample Approval": null, "Ex-Factory": "2026-08-07 05:30"}}, {"flowId": "1068", "po": "893409530.0", "style": "LESTER", "color": "BROWN \nas per cane", "product": "Jacket", "buyer": "OWND", "season": "AW26", "qty": 1200, "deadline": "2026-08-07", "exFactory": "2026-07-29", "merchant": "", "tasks": {"Fabric Order": null, "Trims Order": null, "Trims Approval": null, "Trims Payment": null, "Labdips": null, "Bulk Fabric In-house": null, "Fit Sample Indent": null, "Fit Sample Dispatch": null, "Fit Sample Approval": null, "Trims In-House": null, "PP Sample Indent": null, "PP Sample Dispatch": null, "FPT Approval": null, "PP Sample Recieve": null, "GPT Indent To Testing Agency": null, "GPT Approval": null, "PP Sample Approval": null, "Cutting": null, "Sewing": null, "Inline Inspection": null, "Finishing": null, "Packing": null, "Final Inspection": null, "Shipment Sample Dispatch": null, "Shipment Sample Approval": null, "Ex-Factory": "2026-08-07 05:30"}}, {"flowId": "1067", "po": "893409530.0", "style": "Varsity bomber ", "color": "TBD", "product": "Varsity Jacket", "buyer": "OWND", "season": "AW26", "qty": 1000, "deadline": "2026-07-24", "exFactory": "2026-07-16", "merchant": "", "tasks": {"Fabric Order": null, "Trims Order": null, "Trims Approval": null, "Trims Payment": null, "Labdips": null, "Bulk Fabric In-house": null, "Fit Sample Indent": null, "Fit Sample Dispatch": null, "Fit Sample Approval": null, "Trims In-House": null, "PP Sample Indent": null, "PP Sample Dispatch": null, "FPT Approval": null, "PP Sample Recieve": null, "GPT Indent To Testing Agency": null, "GPT Approval": null, "PP Sample Approval": null, "Cutting": null, "Sewing": null, "Inline Inspection": null, "Finishing": null, "Packing": null, "Final Inspection": null, "Shipment Sample Dispatch": null, "Shipment Sample Approval": null, "Ex-Factory": "2026-07-24 05:30"}}, {"flowId": "1066", "po": "893409530.0", "style": "GRAHAM ", "color": "PEARL", "product": "SHACKET", "buyer": "OWND", "season": "AW26", "qty": 1200, "deadline": "2026-08-07", "exFactory": "2026-07-29", "merchant": "", "tasks": {"Fabric Order": null, "Trims Order": null, "Trims Approval": null, "Trims Payment": null, "Labdips": null, "Bulk Fabric In-house": null, "Fit Sample Indent": null, "Fit Sample Dispatch": null, "Fit Sample Approval": null, "Trims In-House": null, "PP Sample Indent": null, "PP Sample Dispatch": null, "FPT Approval": null, "PP Sample Recieve": null, "GPT Indent To Testing Agency": null, "GPT Approval": null, "PP Sample Approval": null, "Cutting": null, "Sewing": null, "Inline Inspection": null, "Finishing": null, "Packing": null, "Final Inspection": null, "Shipment Sample Dispatch": null, "Shipment Sample Approval": null, "Ex-Factory": "2026-08-07 05:30"}}, {"flowId": "1065", "po": "893409530.0", "style": "SUAVE ", "color": "DARK NAVY", "product": "Jacket", "buyer": "OWND", "season": "AW26", "qty": 1200, "deadline": "2026-08-07", "exFactory": "2026-07-29", "merchant": "", "tasks": {"Fabric Order": null, "Trims Order": null, "Trims Approval": null, "Trims Payment": null, "Labdips": null, "Bulk Fabric In-house": null, "Fit Sample Indent": null, "Fit Sample Dispatch": null, "Fit Sample Approval": null, "Trims In-House": null, "PP Sample Indent": null, "PP Sample Dispatch": null, "FPT Approval": null, "PP Sample Recieve": null, "GPT Indent To Testing Agency": null, "GPT Approval": null, "PP Sample Approval": null, "Cutting": null, "Sewing": null, "Inline Inspection": null, "Finishing": null, "Packing": null, "Final Inspection": null, "Shipment Sample Dispatch": null, "Shipment Sample Approval": null, "Ex-Factory": "2026-08-07 05:30"}}, {"flowId": "1064", "po": "893409530.0", "style": "DON SUEDE", "color": "WINE ", "product": "Jacket", "buyer": "OWND", "season": "AW26", "qty": 1200, "deadline": "2026-08-07", "exFactory": "2026-07-29", "merchant": "", "tasks": {"Fabric Order": null, "Trims Order": null, "Trims Approval": null, "Trims Payment": null, "Labdips": null, "Bulk Fabric In-house": null, "Fit Sample Indent": null, "Fit Sample Dispatch": null, "Fit Sample Approval": null, "Trims In-House": null, "PP Sample Indent": null, "PP Sample Dispatch": null, "FPT Approval": null, "PP Sample Recieve": null, "GPT Indent To Testing Agency": null, "GPT Approval": null, "PP Sample Approval": null, "Cutting": null, "Sewing": null, "Inline Inspection": null, "Finishing": null, "Packing": null, "Final Inspection": null, "Shipment Sample Dispatch": null, "Shipment Sample Approval": null, "Ex-Factory": "2026-08-07 05:30"}}, {"flowId": "1063", "po": "893409530.0", "style": "SUAVE ", "color": "TAUPE ", "product": "Jacket", "buyer": "OWND", "season": "AW26", "qty": 1200, "deadline": "2026-08-21", "exFactory": "2026-08-11", "merchant": "", "tasks": {"Fabric Order": null, "Trims Order": null, "Trims Approval": null, "Trims Payment": null, "Labdips": null, "Bulk Fabric In-house": null, "Fit Sample Indent": null, "Fit Sample Dispatch": null, "Fit Sample Approval": null, "Trims In-House": null, "PP Sample Indent": null, "PP Sample Dispatch": null, "FPT Approval": null, "PP Sample Recieve": null, "GPT Indent To Testing Agency": null, "GPT Approval": null, "PP Sample Approval": null, "Cutting": null, "Sewing": null, "Inline Inspection": null, "Finishing": null, "Packing": null, "Final Inspection": null, "Shipment Sample Dispatch": null, "Shipment Sample Approval": null, "Ex-Factory": "2026-08-21 05:30"}}, {"flowId": "1062", "po": "893409530.0", "style": "CAIN", "color": "BROWN ", "product": "Jacket", "buyer": "OWND", "season": "AW26", "qty": 1200, "deadline": "2026-08-07", "exFactory": "2026-07-29", "merchant": "", "tasks": {"Fabric Order": null, "Trims Order": null, "Trims Approval": null, "Trims Payment": null, "Labdips": null, "Bulk Fabric In-house": null, "Fit Sample Indent": null, "Fit Sample Dispatch": null, "Fit Sample Approval": null, "Trims In-House": null, "PP Sample Indent": null, "PP Sample Dispatch": null, "FPT Approval": null, "PP Sample Recieve": null, "GPT Indent To Testing Agency": null, "GPT Approval": null, "PP Sample Approval": null, "Cutting": null, "Sewing": null, "Inline Inspection": null, "Finishing": null, "Packing": null, "Final Inspection": null, "Shipment Sample Dispatch": null, "Shipment Sample Approval": null, "Ex-Factory": "2026-08-07 05:30"}}, {"flowId": "1061", "po": "893409530.0", "style": "DON SUEDE", "color": "BLACK", "product": "Jacket", "buyer": "OWND", "season": "AW26", "qty": 2000, "deadline": "2026-07-24", "exFactory": "2026-07-16", "merchant": "", "tasks": {"Fabric Order": null, "Trims Order": null, "Trims Approval": null, "Trims Payment": null, "Labdips": null, "Bulk Fabric In-house": null, "Fit Sample Indent": null, "Fit Sample Dispatch": null, "Fit Sample Approval": null, "Trims In-House": null, "PP Sample Indent": null, "PP Sample Dispatch": null, "FPT Approval": null, "PP Sample Recieve": null, "GPT Indent To Testing Agency": null, "GPT Approval": null, "PP Sample Approval": null, "Cutting": null, "Sewing": null, "Inline Inspection": null, "Finishing": null, "Packing": null, "Final Inspection": null, "Shipment Sample Dispatch": null, "Shipment Sample Approval": null, "Ex-Factory": "2026-07-24 05:30"}}, {"flowId": "1060", "po": "893409530.0", "style": "Vic", "color": "BEIGE", "product": "Jacket", "buyer": "OWND", "season": "AW26", "qty": 1200, "deadline": "2026-07-10", "exFactory": "2026-07-03", "merchant": "", "tasks": {"Fabric Order": null, "Trims Order": null, "Trims Approval": null, "Trims Payment": null, "Labdips": null, "Bulk Fabric In-house": null, "Fit Sample Indent": null, "Fit Sample Dispatch": null, "Fit Sample Approval": null, "Trims In-House": null, "PP Sample Indent": null, "PP Sample Dispatch": null, "FPT Approval": null, "PP Sample Recieve": null, "GPT Indent To Testing Agency": null, "GPT Approval": null, "PP Sample Approval": null, "Cutting": null, "Sewing": null, "Inline Inspection": null, "Finishing": null, "Packing": null, "Final Inspection": null, "Shipment Sample Dispatch": null, "Shipment Sample Approval": null, "Ex-Factory": "2026-07-10 05:30"}}, {"flowId": "1059", "po": "893409530.0", "style": "SUAVE ", "color": "BLACK", "product": "Jacket", "buyer": "OWND", "season": "AW26", "qty": 2000, "deadline": "2026-07-24", "exFactory": "2026-07-16", "merchant": "", "tasks": {"Fabric Order": null, "Trims Order": null, "Trims Approval": null, "Trims Payment": null, "Labdips": null, "Bulk Fabric In-house": null, "Fit Sample Indent": null, "Fit Sample Dispatch": null, "Fit Sample Approval": null, "Trims In-House": null, "PP Sample Indent": null, "PP Sample Dispatch": null, "FPT Approval": null, "PP Sample Recieve": null, "GPT Indent To Testing Agency": null, "GPT Approval": null, "PP Sample Approval": null, "Cutting": null, "Sewing": null, "Inline Inspection": null, "Finishing": null, "Packing": null, "Final Inspection": null, "Shipment Sample Dispatch": null, "Shipment Sample Approval": null, "Ex-Factory": "2026-07-24 05:30"}}, {"flowId": "1058", "po": "893409530.0", "style": "DON SUEDE", "color": "PEARL", "product": "Jacket", "buyer": "OWND", "season": "AW26", "qty": 1500, "deadline": "2026-07-24", "exFactory": "2026-07-16", "merchant": "", "tasks": {"Fabric Order": null, "Trims Order": null, "Trims Approval": null, "Trims Payment": null, "Labdips": null, "Bulk Fabric In-house": null, "Fit Sample Indent": null, "Fit Sample Dispatch": null, "Fit Sample Approval": null, "Trims In-House": null, "PP Sample Indent": null, "PP Sample Dispatch": null, "FPT Approval": null, "PP Sample Recieve": null, "GPT Indent To Testing Agency": null, "GPT Approval": null, "PP Sample Approval": null, "Cutting": null, "Sewing": null, "Inline Inspection": null, "Finishing": null, "Packing": null, "Final Inspection": null, "Shipment Sample Dispatch": null, "Shipment Sample Approval": null, "Ex-Factory": "2026-07-24 05:30"}}, {"flowId": "1057", "po": "893409530.0", "style": "LESTER", "color": "BLACK", "product": "Jacket", "buyer": "OWND", "season": "AW26", "qty": 2000, "deadline": "2026-07-24", "exFactory": "2026-07-16", "merchant": "", "tasks": {"Fabric Order": null, "Trims Order": null, "Trims Approval": null, "Trims Payment": null, "Labdips": null, "Bulk Fabric In-house": null, "Fit Sample Indent": null, "Fit Sample Dispatch": null, "Fit Sample Approval": null, "Trims In-House": null, "PP Sample Indent": null, "PP Sample Dispatch": null, "FPT Approval": null, "PP Sample Recieve": null, "GPT Indent To Testing Agency": null, "GPT Approval": null, "PP Sample Approval": null, "Cutting": null, "Sewing": null, "Inline Inspection": null, "Finishing": null, "Packing": null, "Final Inspection": null, "Shipment Sample Dispatch": null, "Shipment Sample Approval": null, "Ex-Factory": "2026-07-24 05:30"}}, {"flowId": "1056", "po": "893409530.0", "style": "DON SUEDE", "color": "BROWN-TAN  ", "product": "Jacket", "buyer": "OWND", "season": "AW26", "qty": 2000, "deadline": "2026-08-07", "exFactory": "2026-07-29", "merchant": "", "tasks": {"Fabric Order": null, "Trims Order": null, "Trims Approval": null, "Trims Payment": null, "Labdips": null, "Bulk Fabric In-house": null, "Fit Sample Indent": null, "Fit Sample Dispatch": null, "Fit Sample Approval": null, "Trims In-House": null, "PP Sample Indent": null, "PP Sample Dispatch": null, "FPT Approval": null, "PP Sample Recieve": null, "GPT Indent To Testing Agency": null, "GPT Approval": null, "PP Sample Approval": null, "Cutting": null, "Sewing": null, "Inline Inspection": null, "Finishing": null, "Packing": null, "Final Inspection": null, "Shipment Sample Dispatch": null, "Shipment Sample Approval": null, "Ex-Factory": "2026-08-07 05:30"}}, {"flowId": "1055", "po": "893409530.0", "style": "Varsity bomber ", "color": "TBD", "product": "Varsity Jacket", "buyer": "OWND", "season": "AW26", "qty": 400, "deadline": "2026-08-07", "exFactory": "2026-07-29", "merchant": "", "tasks": {"Fabric Order": null, "Trims Order": null, "Trims Approval": null, "Trims Payment": null, "Labdips": null, "Bulk Fabric In-house": null, "Fit Sample Indent": null, "Fit Sample Dispatch": null, "Fit Sample Approval": null, "Trims In-House": null, "PP Sample Indent": null, "PP Sample Dispatch": null, "FPT Approval": null, "PP Sample Recieve": null, "GPT Indent To Testing Agency": null, "GPT Approval": null, "PP Sample Approval": null, "Cutting": null, "Sewing": null, "Inline Inspection": null, "Finishing": null, "Packing": null, "Final Inspection": null, "Shipment Sample Dispatch": null, "Shipment Sample Approval": null, "Ex-Factory": "2026-08-07 05:30"}}, {"flowId": "1054", "po": "439085738.0", "style": "11821", "color": "OFF WHITE", "product": "POLO TSHIRT", "buyer": "MUFTI", "season": "SS26", "qty": 1422, "deadline": "2026-06-25", "exFactory": "2026-06-26", "merchant": "Tejveer Kaur", "tasks": {"Fabric Order": null, "Trims Order": null, "Trims Approval": null, "Trims Payment": null, "Labdips": null, "Bulk Fabric In-house": null, "Fit Sample Indent": null, "Fit Sample Dispatch": null, "Fit Sample Approval": null, "Trims In-House": null, "PP Sample Indent": null, "PP Sample Dispatch": null, "FPT Approval": null, "PP Sample Recieve": null, "GPT Indent To Testing Agency": null, "GPT Approval": null, "PP Sample Approval": null, "Cutting": null, "Sewing": null, "Inline Inspection": null, "Finishing": null, "Packing": null, "Final Inspection": null, "Shipment Sample Dispatch": null, "Shipment Sample Approval": null, "Ex-Factory": "2026-06-25 05:30"}}, {"flowId": "1053", "po": "439085738.0", "style": "11909", "color": "OFF WHITE", "product": "POLO TSHIRT", "buyer": "MUFTI", "season": "SS26", "qty": 3309, "deadline": "2026-05-25", "exFactory": "2026-05-25", "merchant": "Tejveer Kaur", "tasks": {"Fabric Order": null, "Trims Order": null, "Trims Approval": null, "Trims Payment": null, "Labdips": null, "Bulk Fabric In-house": null, "Fit Sample Indent": null, "Fit Sample Dispatch": null, "Fit Sample Approval": null, "Trims In-House": null, "PP Sample Indent": null, "PP Sample Dispatch": null, "FPT Approval": null, "PP Sample Recieve": null, "GPT Indent To Testing Agency": null, "GPT Approval": null, "PP Sample Approval": null, "Cutting": null, "Sewing": null, "Inline Inspection": null, "Finishing": null, "Packing": null, "Final Inspection": null, "Shipment Sample Dispatch": null, "Shipment Sample Approval": null, "Ex-Factory": "2026-05-25 05:30"}}, {"flowId": "1052", "po": "439085738.0", "style": "11883", "color": "OFF WHITE", "product": "POLO TSHIRT", "buyer": "MUFTI", "season": "SS26", "qty": 3225, "deadline": "2026-05-25", "exFactory": "2026-05-25", "merchant": "Tejveer Kaur", "tasks": {"Fabric Order": null, "Trims Order": null, "Trims Approval": null, "Trims Payment": null, "Labdips": null, "Bulk Fabric In-house": null, "Fit Sample Indent": null, "Fit Sample Dispatch": null, "Fit Sample Approval": null, "Trims In-House": null, "PP Sample Indent": null, "PP Sample Dispatch": null, "FPT Approval": null, "PP Sample Recieve": null, "GPT Indent To Testing Agency": null, "GPT Approval": null, "PP Sample Approval": null, "Cutting": null, "Sewing": null, "Inline Inspection": null, "Finishing": null, "Packing": null, "Final Inspection": null, "Shipment Sample Dispatch": null, "Shipment Sample Approval": null, "Ex-Factory": "2026-05-25 05:30"}}, {"flowId": "1051", "po": "70058395.0", "style": "Gwen", "color": "Blue", "product": "TRACK PANTS", "buyer": "STYLI WOMEN GCC", "season": "SS26", "qty": 290, "deadline": "2026-04-16", "exFactory": "2026-04-16", "merchant": "Tejveer Kaur", "tasks": {"Fabric Order": null, "Trims Order": null, "Trims Approval": null, "Trims Payment": null, "Labdips": null, "Bulk Fabric In-house": null, "Fit Sample Indent": null, "Fit Sample Dispatch": null, "Fit Sample Approval": null, "Trims In-House": null, "PP Sample Indent": null, "PP Sample Dispatch": null, "FPT Approval": null, "PP Sample Recieve": null, "GPT Indent To Testing Agency": null, "GPT Approval": null, "PP Sample Approval": null, "Cutting": null, "Sewing": null, "Inline Inspection": null, "Finishing": null, "Packing": null, "Final Inspection": null, "Shipment Sample Dispatch": null, "Shipment Sample Approval": null, "Ex-Factory": "2026-04-16 05:30"}}, {"flowId": "1050", "po": "70058395.0", "style": "ACAUGBTM01", "color": "BLACK", "product": "TRACK PANTS", "buyer": "STYLI WOMEN GCC", "season": "SS26", "qty": 370, "deadline": "2026-04-16", "exFactory": "2026-04-16", "merchant": "Tejveer Kaur", "tasks": {"Fabric Order": null, "Trims Order": null, "Trims Approval": null, "Trims Payment": null, "Labdips": null, "Bulk Fabric In-house": null, "Fit Sample Indent": null, "Fit Sample Dispatch": null, "Fit Sample Approval": null, "Trims In-House": null, "PP Sample Indent": null, "PP Sample Dispatch": null, "FPT Approval": null, "PP Sample Recieve": null, "GPT Indent To Testing Agency": null, "GPT Approval": null, "PP Sample Approval": null, "Cutting": null, "Sewing": null, "Inline Inspection": null, "Finishing": null, "Packing": null, "Final Inspection": null, "Shipment Sample Dispatch": null, "Shipment Sample Approval": null, "Ex-Factory": "2026-04-16 05:30"}}, {"flowId": "1049", "po": "643984730.0", "style": "Ranch", "color": "TAUPE ", "product": "POLO TSHIRT", "buyer": "OWND", "season": "SS26", "qty": 1600, "deadline": "2026-04-01", "exFactory": "2026-04-01", "merchant": "", "tasks": {"Fabric Order": null, "Trims Order": null, "Trims Approval": null, "Trims Payment": null, "Labdips": null, "Bulk Fabric In-house": null, "Fit Sample Indent": null, "Fit Sample Dispatch": null, "Fit Sample Approval": null, "Trims In-House": null, "PP Sample Indent": null, "PP Sample Dispatch": null, "FPT Approval": null, "PP Sample Recieve": null, "GPT Indent To Testing Agency": null, "GPT Approval": null, "PP Sample Approval": null, "Cutting": null, "Sewing": null, "Inline Inspection": null, "Finishing": null, "Packing": null, "Final Inspection": null, "Shipment Sample Dispatch": null, "Shipment Sample Approval": null, "Ex-Factory": "2026-04-01 05:30"}}, {"flowId": "1048", "po": "643984730.0", "style": "Ranch", "color": "BLACK ", "product": "POLO TSHIRT", "buyer": "OWND", "season": "SS26", "qty": 1600, "deadline": "2026-04-01", "exFactory": "2026-04-01", "merchant": "", "tasks": {"Fabric Order": null, "Trims Order": null, "Trims Approval": null, "Trims Payment": null, "Labdips": null, "Bulk Fabric In-house": null, "Fit Sample Indent": null, "Fit Sample Dispatch": null, "Fit Sample Approval": null, "Trims In-House": null, "PP Sample Indent": null, "PP Sample Dispatch": null, "FPT Approval": null, "PP Sample Recieve": null, "GPT Indent To Testing Agency": null, "GPT Approval": null, "PP Sample Approval": null, "Cutting": null, "Sewing": null, "Inline Inspection": null, "Finishing": null, "Packing": null, "Final Inspection": null, "Shipment Sample Dispatch": null, "Shipment Sample Approval": null, "Ex-Factory": "2026-04-01 05:30"}}, {"flowId": "1047", "po": "643984730.0", "style": "Nova", "color": "OFF WHITE ", "product": "POLO TSHIRT", "buyer": "OWND", "season": "SS26", "qty": 1600, "deadline": "2026-04-01", "exFactory": "2026-04-01", "merchant": "", "tasks": {"Fabric Order": null, "Trims Order": null, "Trims Approval": null, "Trims Payment": null, "Labdips": null, "Bulk Fabric In-house": null, "Fit Sample Indent": null, "Fit Sample Dispatch": null, "Fit Sample Approval": null, "Trims In-House": null, "PP Sample Indent": null, "PP Sample Dispatch": null, "FPT Approval": null, "PP Sample Recieve": null, "GPT Indent To Testing Agency": null, "GPT Approval": null, "PP Sample Approval": null, "Cutting": null, "Sewing": null, "Inline Inspection": null, "Finishing": null, "Packing": null, "Final Inspection": null, "Shipment Sample Dispatch": null, "Shipment Sample Approval": null, "Ex-Factory": "2026-04-01 05:30"}}, {"flowId": "1046", "po": "643984730.0", "style": "Nova", "color": "OLIVE", "product": "POLO TSHIRT", "buyer": "OWND", "season": "SS26", "qty": 1600, "deadline": "2026-04-01", "exFactory": "2026-04-01", "merchant": "", "tasks": {"Fabric Order": null, "Trims Order": null, "Trims Approval": null, "Trims Payment": null, "Labdips": null, "Bulk Fabric In-house": null, "Fit Sample Indent": null, "Fit Sample Dispatch": null, "Fit Sample Approval": null, "Trims In-House": null, "PP Sample Indent": null, "PP Sample Dispatch": null, "FPT Approval": null, "PP Sample Recieve": null, "GPT Indent To Testing Agency": null, "GPT Approval": null, "PP Sample Approval": null, "Cutting": null, "Sewing": null, "Inline Inspection": null, "Finishing": null, "Packing": null, "Final Inspection": null, "Shipment Sample Dispatch": null, "Shipment Sample Approval": null, "Ex-Factory": "2026-04-01 05:30"}}, {"flowId": "1045", "po": "643984730.0", "style": "Garfield", "color": "Navy", "product": "CREW NECK TSHIRT", "buyer": "OWND", "season": "SS26", "qty": 1200, "deadline": "2026-03-06", "exFactory": "2026-03-06", "merchant": "", "tasks": {"Fabric Order": null, "Trims Order": null, "Trims Approval": null, "Trims Payment": null, "Labdips": null, "Bulk Fabric In-house": null, "Fit Sample Indent": null, "Fit Sample Dispatch": null, "Fit Sample Approval": null, "Trims In-House": null, "PP Sample Indent": null, "PP Sample Dispatch": null, "FPT Approval": null, "PP Sample Recieve": null, "GPT Indent To Testing Agency": null, "GPT Approval": null, "PP Sample Approval": null, "Cutting": null, "Sewing": null, "Inline Inspection": null, "Finishing": null, "Packing": null, "Final Inspection": null, "Shipment Sample Dispatch": null, "Shipment Sample Approval": null, "Ex-Factory": "2026-03-06 05:30"}}, {"flowId": "1044", "po": "2635.0", "style": "2601", "color": "OFF WHITE", "product": "CREW NECK TSHIRT", "buyer": "COBB", "season": "SS26", "qty": 1200, "deadline": "2026-04-10", "exFactory": "2026-04-10", "merchant": "Tejveer Kaur", "tasks": {"Fabric Order": null, "Trims Order": null, "Trims Approval": null, "Trims Payment": null, "Labdips": null, "Bulk Fabric In-house": null, "Fit Sample Indent": null, "Fit Sample Dispatch": null, "Fit Sample Approval": null, "Trims In-House": null, "PP Sample Indent": null, "PP Sample Dispatch": null, "FPT Approval": null, "PP Sample Recieve": null, "GPT Indent To Testing Agency": null, "GPT Approval": null, "PP Sample Approval": null, "Cutting": null, "Sewing": null, "Inline Inspection": null, "Finishing": null, "Packing": null, "Final Inspection": null, "Shipment Sample Dispatch": null, "Shipment Sample Approval": null, "Ex-Factory": "2026-04-10 05:30"}}, {"flowId": "1043", "po": "2635.0", "style": "2603", "color": "BEIGE", "product": "CREW NECK TSHIRT", "buyer": "COBB", "season": "SS26", "qty": 1200, "deadline": "2026-04-10", "exFactory": "2026-04-10", "merchant": "Tejveer Kaur", "tasks": {"Fabric Order": null, "Trims Order": null, "Trims Approval": null, "Trims Payment": null, "Labdips": null, "Bulk Fabric In-house": null, "Fit Sample Indent": null, "Fit Sample Dispatch": null, "Fit Sample Approval": null, "Trims In-House": null, "PP Sample Indent": null, "PP Sample Dispatch": null, "FPT Approval": null, "PP Sample Recieve": null, "GPT Indent To Testing Agency": null, "GPT Approval": null, "PP Sample Approval": null, "Cutting": null, "Sewing": null, "Inline Inspection": null, "Finishing": null, "Packing": null, "Final Inspection": null, "Shipment Sample Dispatch": null, "Shipment Sample Approval": null, "Ex-Factory": "2026-04-10 05:30"}}, {"flowId": "1042", "po": "2635.0", "style": "2602", "color": "TAN", "product": "CREW NECK TSHIRT", "buyer": "COBB", "season": "SS26", "qty": 1200, "deadline": "2026-04-10", "exFactory": "2026-04-10", "merchant": "Tejveer Kaur", "tasks": {"Fabric Order": null, "Trims Order": null, "Trims Approval": null, "Trims Payment": null, "Labdips": null, "Bulk Fabric In-house": null, "Fit Sample Indent": null, "Fit Sample Dispatch": null, "Fit Sample Approval": null, "Trims In-House": null, "PP Sample Indent": null, "PP Sample Dispatch": null, "FPT Approval": null, "PP Sample Recieve": null, "GPT Indent To Testing Agency": null, "GPT Approval": null, "PP Sample Approval": null, "Cutting": null, "Sewing": null, "Inline Inspection": null, "Finishing": null, "Packing": null, "Final Inspection": null, "Shipment Sample Dispatch": null, "Shipment Sample Approval": null, "Ex-Factory": "2026-04-10 05:30"}}, {"flowId": "1041", "po": "2635.0", "style": "2604", "color": "OLIVE", "product": "CREW NECK TSHIRT", "buyer": "COBB", "season": "SS26", "qty": 1200, "deadline": "2026-04-10", "exFactory": "2026-04-10", "merchant": "Tejveer Kaur", "tasks": {"Fabric Order": null, "Trims Order": null, "Trims Approval": null, "Trims Payment": null, "Labdips": null, "Bulk Fabric In-house": null, "Fit Sample Indent": null, "Fit Sample Dispatch": null, "Fit Sample Approval": null, "Trims In-House": null, "PP Sample Indent": null, "PP Sample Dispatch": null, "FPT Approval": null, "PP Sample Recieve": null, "GPT Indent To Testing Agency": null, "GPT Approval": null, "PP Sample Approval": null, "Cutting": null, "Sewing": null, "Inline Inspection": null, "Finishing": null, "Packing": null, "Final Inspection": null, "Shipment Sample Dispatch": null, "Shipment Sample Approval": null, "Ex-Factory": "2026-04-10 05:30"}}, {"flowId": "1037", "po": "554637393.0", "style": "Sunny", "color": "Beige", "product": "SHIRTS", "buyer": "OWND", "season": "SS26", "qty": 1200, "deadline": "2026-04-24", "exFactory": "2026-04-24", "merchant": "", "tasks": {"Fabric Order": null, "Trims Order": null, "Trims Approval": null, "Trims Payment": null, "Labdips": null, "Bulk Fabric In-house": null, "Fit Sample Indent": null, "Fit Sample Dispatch": null, "Fit Sample Approval": null, "Trims In-House": null, "PP Sample Indent": null, "PP Sample Dispatch": null, "FPT Approval": null, "PP Sample Recieve": null, "GPT Indent To Testing Agency": null, "GPT Approval": null, "PP Sample Approval": null, "Cutting": null, "Sewing": null, "Inline Inspection": null, "Finishing": null, "Packing": null, "Final Inspection": null, "Shipment Sample Dispatch": null, "Shipment Sample Approval": null, "Ex-Factory": "2026-04-24 05:30"}}, {"flowId": "1036", "po": "554637393.0", "style": "ohio", "color": "SAGE ", "product": "POLO TSHIRT", "buyer": "OWND", "season": "SS26", "qty": 1600, "deadline": "2026-04-01", "exFactory": "2026-04-01", "merchant": "", "tasks": {"Fabric Order": null, "Trims Order": null, "Trims Approval": null, "Trims Payment": null, "Labdips": null, "Bulk Fabric In-house": null, "Fit Sample Indent": null, "Fit Sample Dispatch": null, "Fit Sample Approval": null, "Trims In-House": null, "PP Sample Indent": null, "PP Sample Dispatch": null, "FPT Approval": null, "PP Sample Recieve": null, "GPT Indent To Testing Agency": null, "GPT Approval": null, "PP Sample Approval": null, "Cutting": null, "Sewing": null, "Inline Inspection": null, "Finishing": null, "Packing": null, "Final Inspection": null, "Shipment Sample Dispatch": null, "Shipment Sample Approval": null, "Ex-Factory": "2026-04-01 05:30"}}, {"flowId": "1032", "po": "554637393.0", "style": "ohio", "color": "Teal", "product": "POLO TSHIRT", "buyer": "OWND", "season": "SS26", "qty": 1700, "deadline": "2026-04-01", "exFactory": "2026-04-01", "merchant": "", "tasks": {"Fabric Order": null, "Trims Order": null, "Trims Approval": null, "Trims Payment": null, "Labdips": null, "Bulk Fabric In-house": null, "Fit Sample Indent": null, "Fit Sample Dispatch": null, "Fit Sample Approval": null, "Trims In-House": null, "PP Sample Indent": null, "PP Sample Dispatch": null, "FPT Approval": null, "PP Sample Recieve": null, "GPT Indent To Testing Agency": null, "GPT Approval": null, "PP Sample Approval": null, "Cutting": null, "Sewing": null, "Inline Inspection": null, "Finishing": null, "Packing": null, "Final Inspection": null, "Shipment Sample Dispatch": null, "Shipment Sample Approval": null, "Ex-Factory": "2026-04-01 05:30"}}, {"flowId": "1024", "po": "554637393.0", "style": "ohio", "color": "Sage ", "product": "POLO TSHIRT", "buyer": "OWND", "season": "SS26", "qty": 1100, "deadline": "2026-04-01", "exFactory": "2026-04-01", "merchant": "", "tasks": {"Fabric Order": null, "Trims Order": null, "Trims Approval": null, "Trims Payment": null, "Labdips": null, "Bulk Fabric In-house": null, "Fit Sample Indent": null, "Fit Sample Dispatch": null, "Fit Sample Approval": null, "Trims In-House": null, "PP Sample Indent": null, "PP Sample Dispatch": null, "FPT Approval": null, "PP Sample Recieve": null, "GPT Indent To Testing Agency": null, "GPT Approval": null, "PP Sample Approval": null, "Cutting": null, "Sewing": null, "Inline Inspection": null, "Finishing": null, "Packing": null, "Final Inspection": null, "Shipment Sample Dispatch": null, "Shipment Sample Approval": null, "Ex-Factory": "2026-04-01 05:30"}}, {"flowId": "1022", "po": "554637393.0", "style": "Trend", "color": "White", "product": "CREW NECK TSHIRT", "buyer": "OWND", "season": "SS26", "qty": 1000, "deadline": "2026-04-11", "exFactory": "2026-04-11", "merchant": "", "tasks": {"Fabric Order": null, "Trims Order": null, "Trims Approval": null, "Trims Payment": null, "Labdips": null, "Bulk Fabric In-house": null, "Fit Sample Indent": null, "Fit Sample Dispatch": null, "Fit Sample Approval": null, "Trims In-House": null, "PP Sample Indent": null, "PP Sample Dispatch": null, "FPT Approval": null, "PP Sample Recieve": null, "GPT Indent To Testing Agency": null, "GPT Approval": null, "PP Sample Approval": null, "Cutting": null, "Sewing": null, "Inline Inspection": null, "Finishing": null, "Packing": null, "Final Inspection": null, "Shipment Sample Dispatch": null, "Shipment Sample Approval": null, "Ex-Factory": "2026-04-11 05:30"}}, {"flowId": "1019", "po": "554637393.0", "style": "ohio", "color": "mustard", "product": "POLO TSHIRT", "buyer": "OWND", "season": "SS26", "qty": 1375, "deadline": "2026-04-01", "exFactory": "2026-04-01", "merchant": "", "tasks": {"Fabric Order": null, "Trims Order": null, "Trims Approval": null, "Trims Payment": null, "Labdips": null, "Bulk Fabric In-house": null, "Fit Sample Indent": null, "Fit Sample Dispatch": null, "Fit Sample Approval": null, "Trims In-House": null, "PP Sample Indent": null, "PP Sample Dispatch": null, "FPT Approval": null, "PP Sample Recieve": null, "GPT Indent To Testing Agency": null, "GPT Approval": null, "PP Sample Approval": null, "Cutting": null, "Sewing": null, "Inline Inspection": null, "Finishing": null, "Packing": null, "Final Inspection": null, "Shipment Sample Dispatch": null, "Shipment Sample Approval": null, "Ex-Factory": "2026-04-01 05:30"}}, {"flowId": "1007", "po": "988986556.0", "style": "BALLER", "color": "BLACK", "product": "SHORTS", "buyer": "OWND", "season": "SS26", "qty": 1100, "deadline": "2026-02-04", "exFactory": "2026-02-04", "merchant": "Tejveer Kaur", "tasks": {"Fabric Order": null, "Trims Order": null, "Trims Approval": null, "Trims Payment": null, "Labdips": null, "Bulk Fabric In-house": null, "Fit Sample Indent": null, "Fit Sample Dispatch": null, "Fit Sample Approval": null, "Trims In-House": null, "PP Sample Indent": null, "PP Sample Dispatch": null, "FPT Approval": null, "PP Sample Recieve": null, "GPT Indent To Testing Agency": null, "GPT Approval": null, "PP Sample Approval": null, "Cutting": null, "Sewing": null, "Inline Inspection": null, "Finishing": null, "Packing": null, "Final Inspection": null, "Shipment Sample Dispatch": null, "Shipment Sample Approval": null, "Ex-Factory": "2026-02-04 05:30"}}, {"flowId": "1006", "po": "988986556.0", "style": "BALLER", "color": "BLUE", "product": "SHORTS", "buyer": "OWND", "season": "SS26", "qty": 1100, "deadline": "2026-02-04", "exFactory": "2026-02-04", "merchant": "Tejveer Kaur", "tasks": {"Fabric Order": null, "Trims Order": null, "Trims Approval": null, "Trims Payment": null, "Labdips": null, "Bulk Fabric In-house": null, "Fit Sample Indent": null, "Fit Sample Dispatch": null, "Fit Sample Approval": null, "Trims In-House": null, "PP Sample Indent": null, "PP Sample Dispatch": null, "FPT Approval": null, "PP Sample Recieve": null, "GPT Indent To Testing Agency": null, "GPT Approval": null, "PP Sample Approval": null, "Cutting": null, "Sewing": null, "Inline Inspection": null, "Finishing": null, "Packing": null, "Final Inspection": null, "Shipment Sample Dispatch": null, "Shipment Sample Approval": null, "Ex-Factory": "2026-02-04 05:30"}}];
+let orders = JSON.parse(JSON.stringify(ORDERS_DATA));
+let selectedOrderIdx = null;
+let filterBuyer = 'all';
+let chatHistory = [];
+
+function fmt(){
+  const d=new Date();
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+function pad(n){return String(n).padStart(2,'0')}
+function timeStr(){const d=new Date();return`${pad(d.getHours())}:${pad(d.getMinutes())}`}
+
+function getProgress(o){
+  let done=0;
+  TASK_COLS.forEach(t=>{if(o.tasks[t])done++});
+  return {done,total:TASK_COLS.length,pct:Math.round(done/TASK_COLS.length*100)};
+}
+
+function setFilter(f,btn){
+  filterBuyer=f;
+  document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  renderOrderList();
+}
+
+function filteredOrders(){
+  const q=document.getElementById('searchInput').value.toLowerCase();
+  return orders.filter(o=>{
+    const matchF=filterBuyer==='all'||o.buyer.includes(filterBuyer);
+    const matchQ=!q||[o.flowId,o.style,o.color,o.buyer,o.product,o.po].some(v=>v.toLowerCase().includes(q));
+    return matchF&&matchQ;
+  });
+}
+
+function renderOrderList(){
+  const list=document.getElementById('orderList');
+  const filtered=filteredOrders();
+  let html='';
+  filtered.forEach((o,i)=>{
+    const realIdx=orders.indexOf(o);
+    const {done,total,pct}=getProgress(o);
+    const sel=realIdx===selectedOrderIdx?'selected':'';
+    html+=`<div class="order-item ${sel}" onclick="selectOrder(${realIdx})">
+      <div class="order-item-top">
+        <span class="flow-id">#${o.flowId}</span>
+        <span style="font-size:10px;color:#aaa">${done}/${total}</span>
+      </div>
+      <div class="order-style">${o.style} <span style="font-weight:400;color:#888">${o.color.trim()}</span></div>
+      <div class="order-meta">${o.buyer} · ${o.product} · ${o.season}</div>
+      <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
+    </div>`;
+  });
+  list.innerHTML=html||'<div style="padding:20px;text-align:center;color:#aaa;font-size:12px">No orders found</div>';
+  updateStats();
+}
+
+function updateStats(){
+  let total=orders.length,done=0,tasks=0,tasksDone=0;
+  orders.forEach(o=>{
+    TASK_COLS.forEach(t=>{tasks++;if(o.tasks[t])tasksDone++;});
+  });
+  document.getElementById('statsLabel').textContent=`${orders.length} orders · ${tasksDone}/${tasks} tasks done`;
+}
+
+function selectOrder(idx){
+  selectedOrderIdx=idx;
+  renderOrderList();
+  renderMain();
+}
+
+function renderMain(){
+  const panel=document.getElementById('mainPanel');
+  if(selectedOrderIdx===null){
+    panel.innerHTML='<div class="empty-main" style="display:flex"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg><p>Select an order to view activities</p></div>';
+    return;
+  }
+  const o=orders[selectedOrderIdx];
+  const {done,total,pct}=getProgress(o);
+  let html=`<div class="main-header">
+    <h2>${o.style.trim()} — ${o.color.trim()} <span style="font-weight:400;font-size:13px;color:#888">(Flow #${o.flowId})</span></h2>
+    <p>${o.buyer} · ${o.product} · ${o.season} · Qty: ${o.qty.toLocaleString()}</p>
+    <div class="main-header-meta">
+      <span class="meta-item"><strong>Deadline:</strong> ${o.deadline||'—'}</span>
+      <span class="meta-item"><strong>Ex-Factory:</strong> ${o.exFactory||'—'}</span>
+      <span class="meta-item"><strong>PO:</strong> ${o.po}</span>
+      <span class="meta-item" style="color:${pct===100?'#1a6b4a':'#c47a00'}"><strong>${done}/${total}</strong> tasks (${pct}%)</span>
+    </div>
+  </div>
+  <div class="tasks-grid">`;
+
+  Object.entries(TASK_GROUPS).forEach(([grpName,tasks])=>{
+    html+=`<div class="task-section"><div class="task-section-title">${grpName}</div><div class="tasks-row">`;
+    tasks.forEach(t=>{
+      const val=o.tasks[t];
+      const cls=val?'done':'pending';
+      html+=`<div class="task-card ${cls}" onclick="toggleTask(${selectedOrderIdx},'${t.replace(/'/g,"\\'")}')">
+        <div class="task-name">${t}</div>
+        <div class="task-date">${val?val.substring(0,16):'Pending'}</div>
+        <div class="task-check">${val?'✓':''}</div>
+      </div>`;
+    });
+    html+='</div></div>';
+  });
+  html+='</div>';
+  panel.innerHTML=html;
+}
+
+function toggleTask(orderIdx,taskName){
+  const o=orders[orderIdx];
+  if(o.tasks[taskName]){
+    if(!confirm(`Remove completion date for "${taskName}"?`))return;
+    o.tasks[taskName]=null;
+  } else {
+    o.tasks[taskName]=fmt();
+  }
+  renderMain();
+  renderOrderList();
+}
+
+function fillHint(text){
+  document.getElementById('chatInput').value=text;
+  document.getElementById('chatInput').focus();
+}
+
+function addMsg(role,text){
+  const c=document.getElementById('chatMessages');
+  const d=document.createElement('div');
+  d.className=`msg ${role}`;
+  d.innerHTML=`<div class="msg-bubble">${text.replace(/\n/g,'<br>')}</div><div class="msg-time">${timeStr()}</div>`;
+  c.appendChild(d);
+  c.scrollTop=c.scrollHeight;
+}
+
+function setTyping(show){
+  document.getElementById('typingWrap').style.display=show?'block':'none';
+  if(show){const c=document.getElementById('chatMessages');c.scrollTop=c.scrollHeight;}
+}
+
+async function sendMessage(){
+  const inp=document.getElementById('chatInput');
+  const text=inp.value.trim();
+  if(!text)return;
+  inp.value='';
+  inp.style.height='34px';
+  addMsg('user',text);
+  chatHistory.push({role:'user',content:text});
+  document.getElementById('sendBtn').disabled=true;
+  setTyping(true);
+
+  // Try API first, fall back to local NLP
+  try{
+    const result = await callAPI(text);
+    setTyping(false);
+    handleResult(result, text);
+  } catch(e){
+    setTyping(false);
+    const result = localNLP(text);
+    handleResult(result, text);
+  }
+  document.getElementById('sendBtn').disabled=false;
+}
+
+async function callAPI(text){
+  const orderSummary=orders.map(o=>{
+    const done=TASK_COLS.filter(t=>o.tasks[t]);
+    const pending=TASK_COLS.filter(t=>!o.tasks[t]);
+    return `FlowID:${o.flowId} Style:${o.style.trim()} Color:${o.color.trim()} Buyer:${o.buyer} Product:${o.product} Season:${o.season} Qty:${o.qty} ExFactory:${o.exFactory} | Done:[${done.join(',')}] | Pending:[${pending.join(',')}]`;
+  }).join('\n');
+
+  const nextId=()=>{const ids=orders.map(o=>parseInt(o.flowId)).filter(n=>!isNaN(n));return String(Math.max(...ids,1000)+1);};
+
+  const sys=`You are AI Merchandiser for a garment company. Manage 26 production activities across orders.
+
+ORDERS:\n${orderSummary}
+
+Respond ONLY with JSON:
+- Task completed: {"action":"complete","updates":[{"flowId":"X","task":"Exact Task Name"}],"message":"ok"}
+- Multiple tasks: {"action":"complete","updates":[{"flowId":"X","task":"A"},{"flowId":"X","task":"B"}],"message":"ok"}
+- New order: {"action":"add_order","order":{"style":"","color":"","product":"","buyer":"","season":"","qty":0,"po":"TBD","exFactory":"YYYY-MM-DD","merchant":""},"message":"ok"}
+- New sample: {"action":"add_sample","sample":{"name":"","style":"","type":"Fit Sample","buyer":"","status":"Pending Dispatch","sent":false,"notes":""},"message":"ok"}
+  Sample types: Fit Sample, PP Sample, Shipment Sample, Counter Sample, Photo Sample
+  Sample statuses: Pending Dispatch, Dispatched, Received by Buyer, Approved, Revision Required, Rejected
+- Unknown: {"action":"none","updates":[],"message":"brief help text"}
+
+Valid tasks: ${TASK_COLS.join(', ')}
+JSON only, no other text.`;
+
+  const resp=await fetch('https://api.anthropic.com/v1/messages',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:800,system:sys,messages:chatHistory.slice(-6)})
+  });
+  if(!resp.ok) throw new Error('API '+resp.status);
+  const data=await resp.json();
+  const raw=data.content?.map(b=>b.text||'').join('')||'';
+  const clean=raw.replace(/```json|```/g,'').trim();
+  return JSON.parse(clean);
+}
+
+// ── Local NLP — works 100% offline ──────────────────────────────
+function localNLP(text){
+  // Strip common filler words that confuse matching
+  const t = text.toLowerCase().trim()
+    .replace(/\bcolor\b/g,'').replace(/\bthe\b/g,'').replace(/\bof\b/g,'')
+    .replace(/\bfor\b/g,' ').replace(/\bour\b/g,'').replace(/\bhas\b/g,'')
+    .replace(/\s+/g,' ').trim();
+
+  // Detect "new order" intent
+  const isNewOrder = /new order|add order|order received|received order|new style|adding order/.test(t);
+  if(isNewOrder) return parseNewOrder(text);
+
+  // Detect "all tasks in X section done"
+  const allSection = matchAllSectionDone(t);
+  if(allSection) return allSection;
+
+  // Detect single/multiple task completions
+  const completions = matchTaskCompletions(t);
+  if(completions.length) return {action:'complete', updates:completions, message:null};
+
+  // Info / question
+  if(/how many|total|pending|status|show|list|what/.test(t)) return answerInfo(t);
+
+  // Check for sample commands
+  const sampleAction = parseSampleCommand(t, text);
+  if(sampleAction) return sampleAction;
+  return {action:'none', updates:[], message:`I didn't catch that. Try:\n• "Labdips done for SKYLAR Black"\n• "All material done for Vic Charcoal"\n• "New sample: SKYLAR Fit Sample, sent to OWND"\n• "New order: NOVA, Navy, OWND, 800 pcs, ex-factory Sept 15"`};
+}
+
+function parseSampleCommand(t, originalText){
+  const isSample = /\bsample\b|\bfit sample\b|\bpp sample\b|\bshipment sample\b|\bcounter sample\b|\bphoto sample\b/.test(t);
+  const isNew = /new|add|create|sent|dispatch|received|approved|rejected|revision/.test(t);
+  if(!isSample) return null;
+
+  const typeMap = {'fit sample':'Fit Sample','pp sample':'PP Sample','shipment sample':'Shipment Sample','counter sample':'Counter Sample','photo sample':'Photo Sample','salesman sample':'Salesman Sample'};
+  let type = 'Fit Sample';
+  for(const [k,v] of Object.entries(typeMap)){ if(t.includes(k)){type=v;break;} }
+
+  let status = 'Pending Dispatch';
+  if(/sent|dispatch/.test(t)) status='Dispatched';
+  if(/received|receive/.test(t)) status='Received by Buyer';
+  if(/approv/.test(t)) status='Approved';
+  if(/reject/.test(t)) status='Rejected';
+  if(/revision/.test(t)) status='Revision Required';
+
+  const sent = /sent|dispatch|received|approv|reject|revision/.test(t);
+
+  // Extract style — look for known style names
+  let style = '', buyer = '';
+  for(const o of orders){ if(t.includes(o.style.trim().toLowerCase())){ style=o.style.trim(); buyer=o.buyer; break; } }
+  const buyers=['OWND','MUFTI','COBB','STYLI'];
+  for(const b of buyers){ if(t.includes(b.toLowerCase())) buyer=b; }
+
+  // Build name
+  const name = style ? `${style} ${type}` : (originalText.replace(/new sample[:\s]*/i,'').trim().split(',')[0].trim() || type);
+
+  return {action:'add_sample', sample:{name, style, type, buyer, status, sent, notes:''}, message:`✓ Added sample: ${name} — ${status}`};
+}
+
+const TASK_ALIASES = {
+  'fabric order':       'Fabric Order',
+  'fabric':             'Fabric Order',
+  'trims order':        'Trims Order',
+  'trim order':         'Trims Order',
+  'trims approval':     'Trims Approval',
+  'trim approval':      'Trims Approval',
+  'trims payment':      'Trims Payment',
+  'trim payment':       'Trims Payment',
+  'labdips':            'Labdips',
+  'labdip':             'Labdips',
+  'lab dip':            'Labdips',
+  'bulk fabric':        'Bulk Fabric In-house',
+  'bulk fabric inhouse':'Bulk Fabric In-house',
+  'bulk fabric in house':'Bulk Fabric In-house',
+  'bulk in house':      'Bulk Fabric In-house',
+  'trims in house':     'Trims In-House',
+  'trims inhouse':      'Trims In-House',
+  'trim in house':      'Trims In-House',
+  'fit sample indent':  'Fit Sample Indent',
+  'fit indent':         'Fit Sample Indent',
+  'fit sample dispatch':'Fit Sample Dispatch',
+  'fit dispatch':       'Fit Sample Dispatch',
+  'fit sample approval':'Fit Sample Approval',
+  'fit approval':       'Fit Sample Approval',
+  'fit sample':         'Fit Sample Dispatch',
+  'pp sample indent':   'PP Sample Indent',
+  'pp indent':          'PP Sample Indent',
+  'pp sample dispatch': 'PP Sample Dispatch',
+  'pp dispatch':        'PP Sample Dispatch',
+  'pp sample receive':  'PP Sample Recieve',
+  'pp sample received': 'PP Sample Recieve',
+  'pp receive':         'PP Sample Recieve',
+  'pp received':        'PP Sample Recieve',
+  'pp sample recieve':  'PP Sample Recieve',
+  'fpt approval':       'FPT Approval',
+  'fpt':                'FPT Approval',
+  'gpt indent':         'GPT Indent To Testing Agency',
+  'gpt testing':        'GPT Indent To Testing Agency',
+  'gpt approval':       'GPT Approval',
+  'gpt':                'GPT Approval',
+  'pp approval':        'PP Sample Approval',
+  'pp sample approval': 'PP Sample Approval',
+  'cutting':            'Cutting',
+  'cut':                'Cutting',
+  'sewing':             'Sewing',
+  'stitch':             'Sewing',
+  'inline inspection':  'Inline Inspection',
+  'inline':             'Inline Inspection',
+  'finishing':          'Finishing',
+  'finish':             'Finishing',
+  'packing':            'Packing',
+  'pack':               'Packing',
+  'final inspection':   'Final Inspection',
+  'final':              'Final Inspection',
+  'shipment sample dispatch': 'Shipment Sample Dispatch',
+  'shipment dispatch':  'Shipment Sample Dispatch',
+  'shipment sample approval': 'Shipment Sample Approval',
+  'shipment approval':  'Shipment Sample Approval',
+  'ex factory':         'Ex-Factory',
+  'ex-factory':         'Ex-Factory',
+  // Natural speech variations
+  'fabric inhouse':      'Bulk Fabric In-house',
+  'fabric in house':     'Bulk Fabric In-house',
+  'fabric in-house':     'Bulk Fabric In-house',
+  'fabric received':     'Bulk Fabric In-house',
+  'bulk received':       'Bulk Fabric In-house',
+  'fabric done':         'Bulk Fabric In-house',
+  'trims done':          'Trims In-House',
+  'trims inhouse':       'Trims In-House',
+  'trims in house':      'Trims In-House',
+  'fit sample done':     'Fit Sample Approval',
+  'fit approved':        'Fit Sample Approval',
+  'pp approved':         'PP Sample Approval',
+  'pp done':             'PP Sample Approval',
+  'gpt done':            'GPT Approval',
+  'shipment done':       'Shipment Sample Approval',
+  'ship sample':         'Shipment Sample Dispatch',
+};
+
+const SECTION_TASKS = {
+  'material': ['Fabric Order','Trims Order','Trims Approval','Trims Payment','Labdips','Bulk Fabric In-house','Trims In-House'],
+  'trims':    ['Trims Order','Trims Approval','Trims Payment','Trims In-House'],
+  'sampling': ['Fit Sample Indent','Fit Sample Dispatch','Fit Sample Approval','PP Sample Indent','PP Sample Dispatch','PP Sample Recieve','FPT Approval','GPT Indent To Testing Agency','GPT Approval','PP Sample Approval'],
+  'production':['Cutting','Sewing','Inline Inspection','Finishing','Packing','Final Inspection'],
+  'shipment': ['Shipment Sample Dispatch','Shipment Sample Approval','Ex-Factory'],
+};
+
+function findOrder(text){
+  const t = text.toLowerCase().trim();
+  const wb = s => new RegExp('(?:^|[\\s,.-])' + s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + '(?=$|[\\s,.-])');
+  // By flow ID
+  const flowMatch = t.match(/(?:flow\s*#?|#)(\d{3,4})/);
+  if(flowMatch) return orders.find(o=>o.flowId===flowMatch[1]);
+  // "this/current order" → selected
+  if(/\b(this|current|the)\s+(order|style)\b/.test(t) && selectedOrderIdx!==null) return orders[selectedOrderIdx];
+  // Style + color (strongest match)
+  for(const o of orders){
+    const style = o.style.trim().toLowerCase();
+    const color = o.color.trim().toLowerCase();
+    if(t.includes(style) && t.includes(color)) return o;
+  }
+  // Style only — word-boundary match, must be unique
+  const styleMatches = orders.filter(o=>{
+    const s = o.style.trim().toLowerCase();
+    if(s.length < 2) return false;
+    return wb(s).test(' '+t+' ');
+  });
+  if(styleMatches.length === 1) return styleMatches[0];
+  // Partial style match as last resort (no fallback to selected)
+  const partial = orders.filter(o=>{
+    const s = o.style.trim().toLowerCase();
+    return t.includes(s) && s.length >= 2;
+  });
+  if(partial.length === 1) return partial[0];
+  if(partial.length > 1){
+    // Disambiguate by color
+    const withColor = partial.filter(o=>t.includes(o.color.trim().toLowerCase()));
+    if(withColor.length === 1) return withColor[0];
+    // Multiple matches with same style — return first, caller will handle all via findAllOrders
+    return partial[0];
+  }
+  // Only fall back to selected if user said nothing order-specific at all
+  const hasOrderRef = orders.some(o=>t.includes(o.style.trim().toLowerCase()) || t.includes(o.flowId));
+  if(!hasOrderRef && selectedOrderIdx!==null) return orders[selectedOrderIdx];
+  return null;
+}
+
+// Returns matching orders. Prefers selected order when style is ambiguous.
+function findAllOrders(text){
+  const t = text.toLowerCase().trim();
+  const flowMatch = t.match(/(?:flow\s*#?|#)(\d{3,4})/);
+  if(flowMatch){ const o=orders.find(o=>o.flowId===flowMatch[1]); return o?[o]:[]; }
+  // Style + color explicitly mentioned = single unambiguous match
+  for(const o of orders){
+    const style = o.style.trim().toLowerCase();
+    const color = o.color.trim().toLowerCase();
+    if(style.length>=2 && t.includes(style) && color.length>=2 && t.includes(color)) return [o];
+  }
+  // Style only
+  const byStyle = orders.filter(o=>t.includes(o.style.trim().toLowerCase()) && o.style.trim().length>=2);
+  if(byStyle.length===1) return byStyle;
+  if(byStyle.length>1){
+    // If one of the matches is the currently selected order, prefer it (user context)
+    if(selectedOrderIdx!==null){
+      const sel = orders[selectedOrderIdx];
+      const selMatch = byStyle.find(o=>o.flowId===sel.flowId);
+      if(selMatch) return [selMatch];
+    }
+    // Otherwise mark all (explicit bulk)
+    return byStyle;
+  }
+  if(selectedOrderIdx!==null) return [orders[selectedOrderIdx]];
+  return [];
+}
+
+function findTask(text){
+  const t = text.toLowerCase();
+  // Longest match first
+  const sorted = Object.keys(TASK_ALIASES).sort((a,b)=>b.length-a.length);
+  for(const alias of sorted){
+    if(t.includes(alias)) return TASK_ALIASES[alias];
+  }
+  return null;
+}
+
+function matchTaskCompletions(t){
+  const hasDoneSignal = /\bdone\b|\bcomplete\b|\bfinished\b|\breceived\b|\bapproved\b/.test(t);
+  if(!hasDoneSignal) return [];
+  const task = findTask(t);
+  if(!task) return [];
+  // Find all matching orders (handles "nova cutting done" → all Nova colors)
+  const matchedOrders = findAllOrders(t);
+  if(!matchedOrders.length) return [];
+  return matchedOrders.map(o=>({flowId:o.flowId, task}));
+}
+
+function matchAllSectionDone(t){
+  // Only fire when user explicitly says "all X done" or "all X and Y done"
+  // NOT when a single task name like "cutting" appears
+  const hasAll = /\ball\b/.test(t);
+  if(!hasAll) return null;
+
+  const sections=[];
+  if(/material/.test(t)) sections.push('material');
+  if(/trim/.test(t)) sections.push('trims');
+  if(/sampling|sample/.test(t)) sections.push('sampling');
+  if(/production/.test(t)) sections.push('production');
+  if(/shipment/.test(t)) sections.push('shipment');
+
+  if(!sections.length) return null;
+
+  const isDone = /done|complete|finish|received|approved|finished|ok|yes/.test(t);
+  if(!isDone) return null;
+
+  const order = findOrder(t);
+  const updates=[];
+  sections.forEach(s=>{
+    const tasks = SECTION_TASKS[s]||[];
+    tasks.forEach(task=>{
+      if(order && !order.tasks[task]) updates.push({flowId:order.flowId, task});
+      else if(!order){
+        // apply to selected
+        if(selectedOrderIdx!==null && !orders[selectedOrderIdx].tasks[task])
+          updates.push({flowId:orders[selectedOrderIdx].flowId, task});
+      }
+    });
+  });
+  if(updates.length) return {action:'complete', updates, message:null};
+  return null;
+}
+
+function parseNewOrder(text){
+  const t = text.toLowerCase();
+  const o = {style:'',color:'',product:'',buyer:'',season:'',qty:0,po:'TBD',exFactory:'',merchant:''};
+
+  // Extract qty
+  const qtyM = text.match(/(\d{3,6})\s*(?:pcs?|pieces?|qty|units?)/i);
+  if(qtyM) o.qty = parseInt(qtyM[1]);
+
+  // Extract ex-factory date
+  const months={jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+  const dateM = text.match(/(?:ex.?factory|ef|ex)\s*:?\s*([A-Za-z]+)\s*(\d{1,2})(?:st|nd|rd|th)?/i);
+  if(dateM){
+    const mon = months[dateM[1].toLowerCase().slice(0,3)];
+    const day = parseInt(dateM[2]);
+    if(mon) o.exFactory = `2026-${String(mon).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+  }
+  // Also try "Sept 15" or "15 Sept"
+  if(!o.exFactory){
+    const dateM2 = text.match(/([A-Za-z]+)\s+(\d{1,2})(?:st|nd|rd|th)?/i);
+    if(dateM2 && months[dateM2[1].toLowerCase().slice(0,3)]){
+      const mon=months[dateM2[1].toLowerCase().slice(0,3)];
+      o.exFactory=`2026-${String(mon).padStart(2,'0')}-${String(parseInt(dateM2[2])).padStart(2,'0')}`;
+    }
+  }
+
+  // Extract buyer
+  const buyers=['OWND','MUFTI','COBB','STYLI'];
+  for(const b of buyers){ if(t.includes(b.toLowerCase())) o.buyer=b; }
+
+  // Extract PO
+  const poM = text.match(/PO\s*:?\s*(\w+)/i);
+  if(poM) o.po = poM[1];
+
+  // Extract season
+  const ssnM = text.match(/\b(SS|AW)\s*(\d{2})\b/i);
+  if(ssnM) o.season = ssnM[1].toUpperCase()+ssnM[2];
+  else if(o.exFactory){
+    const mon=parseInt(o.exFactory.split('-')[1]);
+    const yr=o.exFactory.split('-')[0].slice(2);
+    o.season=(mon<=6?'SS':'AW')+yr;
+  }
+
+  // Remaining words — try to find style and color
+  // Remove known keywords
+  const clean=text.replace(/new order|add order|order received|received|ex.?factory[^,]*/gi,'')
+    .replace(/\d{3,6}\s*(pcs?|pieces?|qty|units?)/gi,'')
+    .replace(/\b(OWND|MUFTI|COBB|STYLI)\b/gi,'')
+    .replace(/PO\s*:?\s*\w+/gi,'')
+    .replace(/(SS|AW)\s*\d{2}/gi,'')
+    .replace(/[^a-zA-Z0-9 ]/g,' ').trim();
+
+  const words=clean.split(/\s+/).filter(w=>w.length>1&&!/^(and|for|the|pcs|qty|style|color|order)$/i.test(w));
+  if(words[0]) o.style=words[0];
+  if(words[1]) o.color=words[1];
+
+  const tasks={};
+  TASK_COLS.forEach(tc=>tasks[tc]=tc==='Ex-Factory'?(o.exFactory||null):null);
+
+  const ids=orders.map(ord=>parseInt(ord.flowId)).filter(n=>!isNaN(n));
+  const newFlowId=String(Math.max(...ids,1000)+1);
+  const newOrder={flowId:newFlowId,po:o.po,style:o.style,color:o.color,product:o.product,buyer:o.buyer,season:o.season,qty:o.qty,deadline:o.exFactory,exFactory:o.exFactory,merchant:o.merchant,tasks};
+  orders.unshift(newOrder);
+  selectedOrderIdx=0;
+  renderOrderList();
+  renderMain();
+  return {action:'add_order', order:o, message:`✓ Added new order — Flow #${newFlowId}\nStyle: ${o.style||'?'} ${o.color||''} | Buyer: ${o.buyer||'?'} | Qty: ${o.qty||'?'} | Ex-Factory: ${o.exFactory||'?'}\n\nAll 26 activities are set to pending. Start marking tasks as they get done!`};
+}
+
+function answerInfo(t){
+  const pending=orders.reduce((a,o)=>a+TASK_COLS.filter(tc=>!o.tasks[tc]).length,0);
+  const done=orders.reduce((a,o)=>a+TASK_COLS.filter(tc=>o.tasks[tc]).length,0);
+  return {action:'info',updates:[],message:`${orders.length} orders tracked. ${done} tasks done, ${pending} still pending across all orders.`};
+}
+
+function handleResult(result, originalText){
+  if(result.action==='complete'&&result.updates?.length){
+    const completed=[];
+    result.updates.forEach(u=>{
+      const order=orders.find(o=>o.flowId===u.flowId);
+      if(order&&u.task&&TASK_COLS.includes(u.task)){
+        order.tasks[u.task]=fmt();
+        completed.push(`✓ ${order.style.trim()} ${order.color.trim()} — ${u.task}`);
+      }
+    });
+    if(completed.length){
+      renderMain();
+      renderOrderList();
+      addMsg('assistant',(result.message||'Marked as done:')+'\n\n'+completed.join('\n'));
+    } else {
+      addMsg('assistant','I found the command but couldn\'t match the order or task. Try mentioning the style name and task more clearly.');
+    }
+  } else if(result.action==='add_order'){
+    addMsg('assistant', result.message||'New order added!');
+  } else {
+    addMsg('assistant',result.message||'I didn\'t understand that. Try: "Labdips done for SKYLAR Black"');
+  }
+  chatHistory.push({role:'assistant',content:result.message||''});
+}
+
+
+
+function exportExcel(){
+  const wb=XLSX.utils.book_new();
+  const header=['FLOW ID','INTERNAL PO','STYLE','STYLE COLOR','PRODUCT','BUYER','SEASON','ORDER QTY','INTERNAL DEADLINE','PROBABLE EX FACTORY DATE','MERCHANT IDS',...TASK_COLS];
+  const rows=[header];
+  orders.forEach(o=>{
+    const row=[o.flowId,o.po,o.style,o.color,o.product,o.buyer,o.season,o.qty,o.deadline,o.exFactory,o.merchant];
+    TASK_COLS.forEach(t=>row.push(o.tasks[t]||''));
+    rows.push(row);
+  });
+  const ws=XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols']=header.map((_,i)=>({wch:i<11?16:18}));
+  XLSX.utils.book_append_sheet(wb,ws,'Orders');
+  XLSX.writeFile(wb,`orders_updated_${new Date().toISOString().slice(0,10)}.xlsx`);
+}
+
+document.getElementById('chatInput').addEventListener('keydown',e=>{
+  if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();}
+});
+document.getElementById('chatInput').addEventListener('input',function(){
+  this.style.height='34px';
+  this.style.height=Math.min(this.scrollHeight,80)+'px';
+});
+
+// ── Persistence via localStorage ────────────────────────────────
+const STORAGE_KEY = 'ai_merchandiser_orders_v1';
+
+function saveData(){
+  try{
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(orders));
+    const ind = document.getElementById('saveIndicator');
+    if(ind){ ind.style.display='inline'; clearTimeout(ind._t); ind._t=setTimeout(()=>ind.style.display='none',1500); }
+  } catch(e){}
+}
+
+function loadData(){
+  try{
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if(saved){
+      const parsed = JSON.parse(saved);
+      if(parsed && parsed.length > 0){
+        // Merge: add any new orders from hardcoded data that aren't in saved
+        const savedIds = new Set(parsed.map(o=>o.flowId));
+        const newFromCode = ORDERS_DATA.filter(o=>!savedIds.has(o.flowId));
+        if(newFromCode.length){
+          // New orders from updated file — append them
+          newFromCode.forEach(o=>{ const t={}; TASK_COLS.forEach(tc=>t[tc]=tc==='Ex-Factory'?(o.tasks[tc]||null):null); parsed.push({...o,tasks:t}); });
+        }
+        return parsed;
+      }
+    }
+  } catch(e){}
+  return null;
+}
+
+function clearData(){
+  if(confirm('Reset all progress and reload original order data? This cannot be undone.')){
+    localStorage.removeItem(STORAGE_KEY);
+    orders = JSON.parse(JSON.stringify(ORDERS_DATA));
+    selectedOrderIdx = null;
+    renderOrderList();
+    renderMain();
+    addMsg('assistant','All progress cleared. Starting fresh from original order data.');
+  }
+}
+
+// Auto-save wrapper — call after any data change
+const _renderOrderList = renderOrderList;
+renderOrderList = function(){ _renderOrderList(); saveData(); };
+
+// Pre-request mic permission so user sees prompt on first load
+if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+  navigator.mediaDevices.getUserMedia({audio:true})
+    .then(stream => { stream.getTracks().forEach(t=>t.stop()); })
+    .catch(() => {}); // silently ignore if denied
+}
+
+// Init — load saved data or fall back to hardcoded
+const savedOrders = loadData();
+if(savedOrders){
+  orders = savedOrders;
+  addMsg('assistant','Progress restored from your last session. ' + str(47) + ' orders loaded.');
+} else {
+  addMsg('assistant','First time setup — loaded ' + str(47) + ' orders. Your progress will be saved automatically.');
+}
+renderOrderList();
+
+
+
+// ── Google Sheets Sync ──────────────────────────────────────────
+const GS_URL_KEY  = 'ai_merch_gs_url';
+const GS_USER_KEY = 'ai_merch_username';
+
+let gsUrl       = localStorage.getItem(GS_URL_KEY) || '';
+let fbUser      = localStorage.getItem(GS_USER_KEY) || 'User';
+let syncEnabled = false;
+let syncPollTimer = null;
+let lastSyncHash = '';
+
+function showSyncSetup(){
+  if(gsUrl) document.getElementById('gsUrlInput').value = gsUrl;
+  document.getElementById('gsNameInput').value = fbUser;
+  document.getElementById('gsSetupSteps').style.display = 'block';
+  document.getElementById('gsSetupDone').style.display  = 'none';
+  document.getElementById('syncSetup').style.display    = 'flex';
+}
+
+function setSyncStatus(label, connected, connecting){
+  const dot = document.getElementById('syncDot');
+  const st  = document.getElementById('syncStatus');
+  const tag = document.getElementById('syncTag');
+  if(!dot) return;
+  dot.className = 'sync-dot' + (connected ? ' connected' : connecting ? ' connecting' : '');
+  st.textContent  = label;
+  tag.textContent = connected ? 'SHEETS LIVE ●' : 'LOCAL ONLY';
+  tag.className   = 'sync-tag' + (connected ? '' : ' warn');
+}
+
+async function connectGoogleSheets(){
+  const url  = (document.getElementById('gsUrlInput').value || '').trim();
+  const name = (document.getElementById('gsNameInput').value || 'User').trim();
+  if(!url || !url.includes('script.google.com')){
+    alert('Please paste a valid Google Apps Script Web App URL');
+    return;
+  }
+  const btn = document.getElementById('gsConnectBtn');
+  btn.textContent = 'Connecting...';
+  btn.disabled = true;
+
+  gsUrl  = url;
+  fbUser = name;
+  localStorage.setItem(GS_URL_KEY,  gsUrl);
+  localStorage.setItem(GS_USER_KEY, fbUser);
+
+  setSyncStatus('Pushing data to Sheets...', false, true);
+
+  try {
+    // Push all current orders to sheet
+    const res = await gsPost({ action:'initSheet', orders, user: fbUser });
+    if(res.error) throw new Error(res.error);
+
+    syncEnabled = true;
+    document.getElementById('gsSheetInfo').textContent =
+      `${res.ordersWritten || orders.length} orders synced to Google Sheets as "${fbUser}"`;
+    document.getElementById('gsSetupSteps').style.display = 'none';
+    document.getElementById('gsSetupDone').style.display  = 'block';
+    setSyncStatus('Connected — ' + fbUser, true, false);
+    document.getElementById('syncBanner').style.display = 'flex';
+    startSyncPoll();
+    addMsg('assistant', `✅ Google Sheets connected! All ${orders.length} orders are now in your sheet.\n\nAdd new orders directly in the sheet — they'll appear here automatically every 30 seconds.`);
+  } catch(e) {
+    setSyncStatus('Connection failed', false, false);
+    addMsg('assistant', '❌ Could not connect: ' + e.message + '\n\nMake sure:\n• You copied the full Web App URL\n• Deployment is set to "Anyone" can access\n• You clicked "Authorize" during deployment');
+    btn.textContent = 'Connect & Push Data';
+    btn.disabled = false;
+  }
+}
+
+async function gsGet(){
+  const r = await fetch(gsUrl, { method:'GET', redirect:'follow' });
+  if(!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}
+
+async function gsPost(body){
+  const r = await fetch(gsUrl, {
+    method:'POST',
+    headers:{'Content-Type':'text/plain'},
+    body: JSON.stringify(body),
+    redirect:'follow'
+  });
+  if(!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}
+
+// Push a single task update to Sheets
+async function pushTaskUpdate(flowId, task, value){
+  if(!syncEnabled || !gsUrl) return;
+  try {
+    await gsPost({ action:'updateTask', flowId, task, value: value||'', user: fbUser });
+  } catch(e) {
+    console.warn('Sheets sync failed:', e.message);
+  }
+}
+
+// Poll Sheets for new data (new orders added in sheet, updates from teammates)
+function startSyncPoll(){
+  if(syncPollTimer) clearInterval(syncPollTimer);
+  syncPollTimer = setInterval(async () => {
+    if(!syncEnabled || !gsUrl) return;
+    try {
+      const data = await gsGet();
+      if(!data || !data.orders || !data.orders.length) return;
+      const hash = data.orders.length + ':' + (data.orders[0]?.flowId || '');
+      if(hash === lastSyncHash) return;
+      lastSyncHash = hash;
+
+      // Merge: keep local task completions, add new orders from sheet
+      const localById = {};
+      orders.forEach(o => localById[o.flowId] = o);
+      let newCount = 0;
+      data.orders.forEach(sheetOrder => {
+        if(!localById[sheetOrder.flowId]){
+          // New order from sheet — add it
+          orders.unshift(sheetOrder);
+          newCount++;
+        } else {
+          // Existing order — merge sheet task dates (sheet wins for non-null)
+          const local = localById[sheetOrder.flowId];
+          Object.keys(sheetOrder.tasks).forEach(t => {
+            if(sheetOrder.tasks[t] && !local.tasks[t]) local.tasks[t] = sheetOrder.tasks[t];
+          });
+        }
+      });
+      if(data.samples) {
+        const localSampleIds = new Set(samples.map(s=>s.id));
+        data.samples.forEach(s => { if(!localSampleIds.has(s.id)) samples.push(s); });
+        saveSamples();
+      }
+      saveData();
+      renderOrderList();
+      if(newCount > 0){
+        renderMain();
+        addMsg('assistant', `🔄 ${newCount} new order${newCount>1?'s':''} pulled from Google Sheets!`);
+      }
+    } catch(e){ /* silent */ }
+  }, 30000); // poll every 30 seconds
+}
+
+// Manual sync button
+async function manualSync(){
+  if(!syncEnabled || !gsUrl){ showSyncSetup(); return; }
+  setSyncStatus('Syncing...', false, true);
+  try {
+    const data = await gsGet();
+    if(!data || !data.orders) throw new Error('No data returned');
+    orders = data.orders;
+    if(data.samples) { samples = data.samples; saveSamples(); }
+    saveData();
+    renderOrderList();
+    renderMain();
+    setSyncStatus('Connected — ' + fbUser, true, false);
+    addMsg('assistant', `✅ Synced! ${orders.length} orders loaded from Google Sheets.`);
+  } catch(e){
+    setSyncStatus('Sync failed — retrying', false, false);
+    addMsg('assistant', '⚠️ Sync failed: ' + e.message);
+  }
+}
+
+// Override toggleTask to also push to Sheets
+const _toggleTaskGS = toggleTask;
+toggleTask = function(orderIdx, taskName){
+  _toggleTaskGS(orderIdx, taskName);
+  const o = orders[orderIdx];
+  if(o) pushTaskUpdate(o.flowId, taskName, o.tasks[taskName] || '');
+};
+
+// Override handleResult to push to Sheets
+const _handleResultGS = handleResult;
+handleResult = function(result, originalText){
+  _handleResultGS(result, originalText);
+  if(!syncEnabled) return;
+  if(result.action === 'complete' && result.updates?.length){
+    result.updates.forEach(u => {
+      const o = orders.find(x=>x.flowId===u.flowId);
+      if(o) pushTaskUpdate(o.flowId, u.task, o.tasks[u.task] || '');
+    });
+  } else if(result.action === 'add_order'){
+    const newest = orders[0];
+    if(newest) gsPost({ action:'addOrder', order: newest, user: fbUser }).catch(()=>{});
+  }
+};
+
+// Override submitAddSample to sync
+const _submitAddSampleGS = submitAddSample;
+// (hooked via saveSamples override below)
+const _saveSamplesGS = saveSamples;
+saveSamples = function(){
+  _saveSamplesGS();
+  if(syncEnabled && samples.length){
+    gsPost({ action:'addSample', sample: samples[0], user: fbUser }).catch(()=>{});
+  }
+};
+
+// Auto-reconnect on load
+window.addEventListener('load', () => {
+  document.getElementById('syncBanner').style.display = 'flex';
+  const savedUrl  = localStorage.getItem(GS_URL_KEY);
+  const savedUser = localStorage.getItem(GS_USER_KEY);
+  if(savedUser) fbUser = savedUser;
+  if(savedUrl){
+    gsUrl = savedUrl;
+    syncEnabled = true;
+    setSyncStatus('Reconnecting to Sheets...', false, true);
+    gsGet().then(data => {
+      if(data && data.orders && data.orders.length){
+        orders = data.orders;
+        if(data.samples){ samples = data.samples; saveSamples(); }
+        saveData();
+        renderOrderList();
+        renderMain();
+        lastSyncHash = data.orders.length + ':' + (data.orders[0]?.flowId||'');
+      }
+      setSyncStatus('Connected — ' + fbUser, true, false);
+      startSyncPoll();
+    }).catch(() => {
+      setSyncStatus('Sheets offline — using local data', false, false);
+    });
+  } else {
+    setSyncStatus('Click "Configure Sync" to connect Google Sheets', false, false);
+  }
+});
+
+
+
+
+// ── Samples Module ───────────────────────────────────────────────
+let samples = JSON.parse(localStorage.getItem('ai_merch_samples_v1') || '[]');
+let activeModule = 'orders'; // 'orders' | 'samples'
+let sampleFilter = 'all';
+
+const SAMPLE_STATUSES = ['Pending Dispatch','Dispatched','Received by Buyer','Approved','Revision Required','Rejected'];
+const STATUS_COLORS = {
+  'Pending Dispatch':  {bg:'#fff8e1',color:'#b45309',dot:'#f59e0b'},
+  'Dispatched':        {bg:'#e0f2fe',color:'#0369a1',dot:'#0ea5e9'},
+  'Received by Buyer': {bg:'#f3e8ff',color:'#7e22ce',dot:'#a855f7'},
+  'Approved':          {bg:'#f0fdf4',color:'#166534',dot:'#22c55e'},
+  'Revision Required': {bg:'#fff7ed',color:'#9a3412',dot:'#f97316'},
+  'Rejected':          {bg:'#fef2f2',color:'#991b1b',dot:'#ef4444'},
+};
+
+function saveSamples(){ localStorage.setItem('ai_merch_samples_v1', JSON.stringify(samples)); }
+
+function switchModule(mod){
+  activeModule = mod;
+  document.getElementById('tabOrders').classList.toggle('tab-active', mod==='orders');
+  document.getElementById('tabSamples').classList.toggle('tab-active', mod==='samples');
+  const ov = document.getElementById('ordersView');
+  const sv = document.getElementById('samplesView');
+  if(ov) ov.style.display = mod==='orders' ? 'contents' : 'none';
+  if(sv) sv.style.display = mod==='samples' ? 'flex' : 'none';
+  if(mod==='samples') renderSamples();
+}
+
+function renderSamples(){
+  const wrap = document.getElementById('samplesView');
+  if(!wrap) return;
+  const q = document.getElementById('sampleSearch')?.value?.toLowerCase() || '';
+  const filtered = samples.filter(s=>{
+    const matchF = sampleFilter==='all' || s.status===sampleFilter;
+    const matchQ = !q || s.name.toLowerCase().includes(q) || s.style.toLowerCase().includes(q) || s.type.toLowerCase().includes(q);
+    return matchF && matchQ;
+  });
+
+  const stats = {
+    total: samples.length,
+    dispatched: samples.filter(s=>['Dispatched','Received by Buyer'].includes(s.status)).length,
+    approved: samples.filter(s=>s.status==='Approved').length,
+    pending: samples.filter(s=>s.status==='Pending Dispatch').length,
+  };
+
+  wrap.innerHTML = `
+    <div class="s-header">
+      <div class="s-stats">
+        <div class="s-stat"><div class="s-stat-n">${stats.total}</div><div class="s-stat-l">Total</div></div>
+        <div class="s-stat"><div class="s-stat-n" style="color:#f59e0b">${stats.pending}</div><div class="s-stat-l">Pending</div></div>
+        <div class="s-stat"><div class="s-stat-n" style="color:#0ea5e9">${stats.dispatched}</div><div class="s-stat-l">In Transit</div></div>
+        <div class="s-stat"><div class="s-stat-n" style="color:#22c55e">${stats.approved}</div><div class="s-stat-l">Approved</div></div>
+      </div>
+      <div class="s-toolbar">
+        <input id="sampleSearch" class="s-search" placeholder="Search samples..." oninput="renderSamples()">
+        <button class="s-add-btn" onclick="showAddSample()">+ Add Sample</button>
+      </div>
+      <div class="s-filters">
+        <button class="s-filter ${sampleFilter==='all'?'s-filter-active':''}" onclick="setSampleFilter('all',this)">All</button>
+        ${SAMPLE_STATUSES.map(st=>`<button class="s-filter ${sampleFilter===st?'s-filter-active':''}" onclick="setSampleFilter('${st}',this)">${st}</button>`).join('')}
+      </div>
+    </div>
+    <div class="s-list">
+      ${filtered.length===0 ? `<div class="s-empty">${samples.length===0?'No samples yet. Click "+ Add Sample" or tell the AI assistant.':'No samples match your filter.'}</div>` :
+        filtered.map(s=>`
+        <div class="s-card">
+          <div class="s-card-top">
+            <div>
+              <div class="s-name">${s.name}</div>
+              <div class="s-meta">${s.type} &nbsp;·&nbsp; ${s.style} ${s.buyer?'&nbsp;·&nbsp; '+s.buyer:''} ${s.qty?'&nbsp;·&nbsp; <strong>'+s.qty+' pcs</strong>':''}</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <div class="s-sent-toggle ${s.sent?'sent':''}" onclick="toggleSampleSent('${s.id}')">
+                ${s.sent?'✓ Sent':'Not sent'}
+              </div>
+              <button class="s-del" onclick="deleteSample('${s.id}')" title="Delete">✕</button>
+            </div>
+          </div>
+          <div class="s-card-bottom">
+            <div class="s-status-badge" style="background:${STATUS_COLORS[s.status]?.bg||'#f5f5f5'};color:${STATUS_COLORS[s.status]?.color||'#555'}">
+              <span style="width:6px;height:6px;border-radius:50%;background:${STATUS_COLORS[s.status]?.dot||'#888'};display:inline-block;margin-right:4px"></span>
+              ${s.status}
+            </div>
+            <select class="s-status-sel" onchange="updateSampleStatus('${s.id}',this.value)">
+              ${SAMPLE_STATUSES.map(st=>`<option value="${st}" ${s.status===st?'selected':''}>${st}</option>`).join('')}
+            </select>
+            ${s.date?`<span class="s-date">${s.date}</span>`:''}
+            ${s.notes?`<span class="s-notes">${s.notes}</span>`:''}
+          </div>
+        </div>`).join('')
+      }
+    </div>
+    <div id="addSampleForm" class="s-form" style="display:none">
+      <div class="s-form-title">Add New Sample</div>
+      <div class="s-form-grid">
+        <div><label class="s-label">Sample / Style Name</label><input id="sf-name" class="s-input" placeholder="e.g. SKYLAR Fit Sample"></div>
+        <div><label class="s-label">Style</label><input id="sf-style" class="s-input" placeholder="e.g. SKYLAR"></div>
+        <div><label class="s-label">Type</label>
+          <select id="sf-type" class="s-input">
+            <option>Fit Sample</option><option>PP Sample</option><option>Shipment Sample</option><option>Counter Sample</option><option>Photo Sample</option><option>Salesman Sample</option><option>Other</option>
+          </select>
+        </div>
+        <div><label class="s-label">Buyer</label><input id="sf-buyer" class="s-input" placeholder="e.g. OWND, MUFTI"></div>
+        <div><label class="s-label">Status</label>
+          <select id="sf-status" class="s-input">${SAMPLE_STATUSES.map(st=>`<option>${st}</option>`).join('')}</select>
+        </div>
+        <div><label class="s-label">Quantity (pcs)</label><input id="sf-qty" class="s-input" type="number" placeholder="e.g. 3"></div>
+        <div><label class="s-label">Sent?</label>
+          <select id="sf-sent" class="s-input"><option value="0">Not sent</option><option value="1">Sent</option></select>
+        </div>
+      </div>
+      <input id="sf-notes" class="s-input" placeholder="Notes (optional)" style="width:100%;margin-top:8px">
+      <div class="s-form-actions">
+        <button class="s-btn" onclick="document.getElementById('addSampleForm').style.display='none'">Cancel</button>
+        <button class="s-btn s-btn-primary" onclick="submitAddSample()">Add Sample</button>
+      </div>
+    </div>
+  `;
+}
+
+function setSampleFilter(f, btn){
+  sampleFilter = f;
+  renderSamples();
+}
+
+function showAddSample(prefill){
+  renderSamples();
+  const form = document.getElementById('addSampleForm');
+  if(form){ 
+    form.style.display='block';
+    if(prefill){
+      if(prefill.name) document.getElementById('sf-name').value = prefill.name;
+      if(prefill.style) document.getElementById('sf-style').value = prefill.style;
+      if(prefill.type){ const sel=document.getElementById('sf-type'); for(let o of sel.options) if(o.value===prefill.type){sel.value=prefill.type;break;} }
+      if(prefill.buyer) document.getElementById('sf-buyer').value = prefill.buyer;
+      if(prefill.status){ const sel=document.getElementById('sf-status'); for(let o of sel.options) if(o.value===prefill.status){sel.value=prefill.status;break;} }
+      if(prefill.sent) document.getElementById('sf-sent').value = prefill.sent?'1':'0';
+    }
+    form.scrollIntoView({behavior:'smooth'});
+  }
+}
+
+function submitAddSample(){
+  const name = document.getElementById('sf-name').value.trim();
+  if(!name){ alert('Please enter a sample name'); return; }
+  const s = {
+    id: 's'+Date.now(),
+    name,
+    style: document.getElementById('sf-style').value.trim(),
+    type: document.getElementById('sf-type').value,
+    buyer: document.getElementById('sf-buyer').value.trim(),
+    qty: parseInt(document.getElementById('sf-qty').value)||0,
+    status: document.getElementById('sf-status').value,
+    sent: document.getElementById('sf-sent').value === '1',
+    notes: document.getElementById('sf-notes').value.trim(),
+    date: fmt().slice(0,10),
+  };
+  samples.unshift(s);
+  saveSamples();
+  if(syncEnabled) pushBlob();
+  renderSamples();
+  addMsg('assistant', `✓ Added sample: ${s.name} (${s.type}) — Status: ${s.status}`);
+}
+
+function toggleSampleSent(id){
+  const s = samples.find(x=>x.id===id);
+  if(!s) return;
+  s.sent = !s.sent;
+  if(s.sent && s.status==='Pending Dispatch') s.status='Dispatched';
+  saveSamples();
+  if(syncEnabled) pushBlob();
+  renderSamples();
+}
+
+function updateSampleStatus(id, status){
+  const s = samples.find(x=>x.id===id);
+  if(!s) return;
+  s.status = status;
+  if(status!=='Pending Dispatch' && status!=='Not sent') s.sent = true;
+  saveSamples();
+  if(syncEnabled) pushBlob();
+  renderSamples();
+}
+
+function deleteSample(id){
+  if(!confirm('Delete this sample?')) return;
+  samples = samples.filter(s=>s.id!==id);
+  saveSamples();
+  renderSamples();
+}
+
+// Handle AI adding samples
+function handleAddSample(parsed){
+  const s = parsed.sample || {};
+  const newSample = {
+    id: 's'+Date.now(),
+    name: s.name || '',
+    style: s.style || '',
+    type: s.type || 'Fit Sample',
+    buyer: s.buyer || '',
+    status: s.sent ? 'Dispatched' : (s.status || 'Pending Dispatch'),
+    sent: s.sent || false,
+    notes: s.notes || '',
+    date: fmt().slice(0,10),
+  };
+  samples.unshift(newSample);
+  saveSamples();
+  if(syncEnabled) pushBlob();
+  // Switch to samples view
+  switchModule('samples');
+  addMsg('assistant', parsed.message || `✓ Added sample: ${newSample.name} (${newSample.type}) — ${newSample.status}`);
+}
+
+// Push samples in blob too
+const _pushBlobOrig = typeof pushBlob !== 'undefined' ? pushBlob : null;
+if(_pushBlobOrig){
+  pushBlob = function(){
+    if(!blobId || !syncEnabled) return;
+    isUpdating = true;
+    fetch(`${BLOB_API}/${blobId}`, {
+      method:'PUT',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({orders, samples, lastUpdatedBy:fbUser, ts:Date.now()})
+    }).catch(e=>{}).finally(()=>{ isUpdating=false; });
+  };
+}
+
+// Load samples from blob on sync
+const _origFetchBlob = fetchBlob;
+fetchBlob = async function(){
+  const data = await _origFetchBlob();
+  if(data && data.samples){ samples = data.samples; saveSamples(); }
+  return data;
+};
+
+
+// ── Voice Recognition ──────────────────────────────────────────
+let recognition = null;
+let isListening = false;
+
+function initSpeech() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) return null;
+  const r = new SpeechRecognition();
+  r.lang = 'en-IN';
+  r.continuous = false;
+  r.interimResults = true;
+  r.maxAlternatives = 1;
+
+  r.onstart = () => {
+    isListening = true;
+    const micBtn = document.getElementById('micBtn');
+    micBtn.classList.add('listening');
+    micBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>`;
+    document.getElementById('voiceStatus').classList.add('active');
+    const vst=document.getElementById('voiceStatusText'); if(vst) vst.textContent='Listening — speak now...';
+    document.getElementById('chatInput').placeholder = 'Listening — speak now...';
+  };
+
+  r.onresult = (e) => {
+    let interim = '', final = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const t = e.results[i][0].transcript;
+      if (e.results[i].isFinal) final += t;
+      else interim += t;
+    }
+    const inp = document.getElementById('chatInput');
+    inp.value = final || interim;
+    inp.style.height = '34px';
+    inp.style.height = Math.min(inp.scrollHeight, 80) + 'px';
+    const vst3=document.getElementById('voiceStatusText');
+    if(vst3 && interim) vst3.textContent = '"' + interim.slice(0,40) + '..."';
+  };
+
+  r.onerror = (e) => {
+    stopListening();
+    if (e.error === 'not-allowed' || e.error === 'permission-denied') {
+      addMsg('assistant', '🎤 Microphone blocked. Click the 🔒 icon in your browser address bar → allow microphone → refresh and try again.');
+    } else if (e.error === 'no-speech') {
+      addMsg('assistant', 'No speech detected — try again and speak clearly.');
+    } else if (e.error === 'network') {
+      addMsg('assistant', 'Voice needs internet for speech processing. Check your connection.');
+    } else {
+      addMsg('assistant', 'Voice error: ' + e.error + '. Try typing instead.');
+    }
+  };
+
+  r.onend = () => {
+    stopListening();
+    const text = document.getElementById('chatInput').value.trim();
+    if (text) {
+      document.getElementById('chatInput').focus();
+      document.getElementById('chatInput').select();
+      addMsg('assistant','Got it — please check the text above and press ↑ or Enter to send, or edit if needed.');
+    }
+  };
+
+  return r;
+}
+
+function stopListening() {
+  isListening = false;
+  const btn = document.getElementById('micBtn');
+  btn.classList.remove('listening');
+  btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>`;
+  document.getElementById('voiceStatus').classList.remove('active');
+  const vst2=document.getElementById('voiceStatusText'); if(vst2) vst2.textContent='Listening — speak now...';
+  document.getElementById('chatInput').placeholder = 'Type or click mic to speak...';
+}
+
+async function toggleVoice() {
+  if (isListening) {
+    recognition?.stop();
+    stopListening();
+    return;
+  }
+  // Proactively request mic permission before starting recognition
+  if (navigator.permissions) {
+    try {
+      const perm = await navigator.permissions.query({name:'microphone'});
+      if (perm.state === 'denied') {
+        addMsg('assistant', '🎤 Microphone is blocked. Click the 🔒 padlock in the browser address bar → Site settings → Microphone → Allow → refresh the page.');
+        return;
+      }
+    } catch(e) {}
+  }
+  if (!recognition) recognition = initSpeech();
+  if (!recognition) {
+    addMsg('assistant', '⚠️ Voice not supported in this browser. Please use Chrome or Edge on desktop.');
+    return;
+  }
+  document.getElementById('chatInput').value = '';
+  try {
+    recognition.start();
+  } catch(e) {
+    // Recognition already started or aborted — reinit
+    recognition = initSpeech();
+    try { recognition.start(); } catch(e2) {
+      addMsg('assistant', 'Microphone error: ' + (e2.message || e2) + '. Try refreshing and allowing mic access.');
+    }
+  }
+}
+
+// Keyboard shortcut: hold Space to speak (when input not focused)
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space' && e.target !== document.getElementById('chatInput') && !e.repeat) {
+    e.preventDefault();
+    if (!isListening) toggleVoice();
+  }
+});
+document.addEventListener('keyup', e => {
+  if (e.code === 'Space' && e.target !== document.getElementById('chatInput') && isListening) {
+    recognition?.stop();
+  }
+});
+</script>
+</div><!-- /app -->
+</body>
+</html>

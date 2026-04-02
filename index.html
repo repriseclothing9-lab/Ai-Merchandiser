@@ -1035,10 +1035,21 @@ async function connectGoogleSheets(){
 
   try {
     // Push all current orders to sheet
-    const res = await gsPost({ action:'initSheet', orders, user: fbUser });
+    // Ensure all orders have valid tasks before pushing
+    const ordersToSync = orders.map(o => ({
+      ...o,
+      tasks: o.tasks || {},
+    }));
+    const res = await gsPost({ action:'initSheet', orders: ordersToSync, user: fbUser });
     if(res.error) throw new Error(res.error);
 
     syncEnabled = true;
+    // Re-init orders from local data in case they were cleared
+    if(!orders || orders.length === 0){
+      orders = JSON.parse(JSON.stringify(ORDERS_DATA));
+      saveData();
+      renderOrderList();
+    }
     document.getElementById('gsSheetInfo').textContent =
       `${res.ordersWritten || orders.length} orders synced to Google Sheets as "${fbUser}"`;
     document.getElementById('gsSetupSteps').style.display = 'none';
@@ -1099,16 +1110,22 @@ function startSyncPoll(){
       orders.forEach(o => localById[o.flowId] = o);
       let newCount = 0;
       data.orders.forEach(sheetOrder => {
+        if(!sheetOrder || !sheetOrder.flowId) return;
         if(!localById[sheetOrder.flowId]){
-          // New order from sheet — add it
+          // New order from sheet — ensure tasks object exists
+          if(!sheetOrder.tasks) sheetOrder.tasks = {};
+          TASK_COLS.forEach(t => { if(!sheetOrder.tasks[t]) sheetOrder.tasks[t] = null; });
           orders.unshift(sheetOrder);
           newCount++;
         } else {
-          // Existing order — merge sheet task dates (sheet wins for non-null)
+          // Existing — merge sheet task dates
           const local = localById[sheetOrder.flowId];
-          Object.keys(sheetOrder.tasks).forEach(t => {
-            if(sheetOrder.tasks[t] && !local.tasks[t]) local.tasks[t] = sheetOrder.tasks[t];
-          });
+          if(!local.tasks) local.tasks = {};
+          if(sheetOrder.tasks){
+            Object.keys(sheetOrder.tasks).forEach(t => {
+              if(sheetOrder.tasks[t] && !local.tasks[t]) local.tasks[t] = sheetOrder.tasks[t];
+            });
+          }
         }
       });
       if(data.samples) {
@@ -1132,14 +1149,20 @@ async function manualSync(){
   setSyncStatus('Syncing...', false, true);
   try {
     const data = await gsGet();
-    if(!data || !data.orders) throw new Error('No data returned');
-    orders = data.orders;
-    if(data.samples) { samples = data.samples; saveSamples(); }
+    if(!data) throw new Error('No response from Sheets');
+    if(data.error) throw new Error(data.error);
+    if(data.orders && data.orders.length > 0){
+      orders = data.orders.map(o => ({...o, tasks: o.tasks||{}}));
+      TASK_COLS.forEach(t => orders.forEach(o => { if(o.tasks[t]===undefined) o.tasks[t]=null; }));
+    } else if(!orders || orders.length===0){
+      orders = JSON.parse(JSON.stringify(ORDERS_DATA));
+    }
+    if(data.samples){ samples = data.samples; saveSamples(); }
     saveData();
     renderOrderList();
     renderMain();
     setSyncStatus('Connected — ' + fbUser, true, false);
-    addMsg('assistant', `✅ Synced! ${orders.length} orders loaded from Google Sheets.`);
+    addMsg('assistant', `✅ Synced! ${orders.length} orders from Google Sheets.`);
   } catch(e){
     setSyncStatus('Sync failed — retrying', false, false);
     addMsg('assistant', '⚠️ Sync failed: ' + e.message);

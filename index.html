@@ -358,7 +358,13 @@ function renderOrderList(){
       <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
     </div>`;
   });
-  list.innerHTML=html||'<div style="padding:20px;text-align:center;color:#aaa;font-size:12px">No orders found</div>';
+  if(!html){
+    if(orders.length === 0){
+      list.innerHTML = '<div style="padding:20px;text-align:center;font-size:12px"><p style="color:#aaa;margin-bottom:12px">No orders loaded.</p><button onclick="forceReloadOrders()" style="background:#1a6b4a;color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:12px">Load Orders</button></div>';
+    } else {
+      list.innerHTML = '<div style="padding:20px;text-align:center;color:#aaa;font-size:12px">No orders match</div>';
+    }
+  } else { list.innerHTML = html; }
   updateStats();
 }
 
@@ -877,6 +883,14 @@ function handleResult(result, originalText){
 
 
 
+
+function forceReloadOrders(){
+  orders = JSON.parse(JSON.stringify(ORDERS_DATA));
+  saveData();
+  renderOrderList();
+  addMsg('assistant', orders.length + ' orders loaded successfully!');
+}
+
 function exportExcel(){
   const wb=XLSX.utils.book_new();
   const header=['FLOW ID','INTERNAL PO','STYLE','STYLE COLOR','PRODUCT','BUYER','SEASON','ORDER QTY','INTERNAL DEADLINE','PROBABLE EX FACTORY DATE','MERCHANT IDS',...TASK_COLS];
@@ -953,15 +967,22 @@ if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
     .catch(() => {}); // silently ignore if denied
 }
 
-// Init — load saved data or fall back to hardcoded
-const savedOrders = loadData();
-if(savedOrders){
-  orders = savedOrders;
-  addMsg('assistant','Progress restored from your last session. ' + str(47) + ' orders loaded.');
-} else {
-  addMsg('assistant','First time setup — loaded ' + str(47) + ' orders. Your progress will be saved automatically.');
-}
-renderOrderList();
+// Init — always ensure orders are populated
+(function(){
+  const saved = loadData();
+  if(saved && saved.length > 0){
+    orders = saved;
+  } else {
+    // Fresh start — use hardcoded data
+    orders = JSON.parse(JSON.stringify(ORDERS_DATA));
+    saveData();
+  }
+  if(!orders || orders.length === 0){
+    orders = JSON.parse(JSON.stringify(ORDERS_DATA));
+    saveData();
+  }
+  renderOrderList();
+})();
 
 
 

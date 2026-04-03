@@ -284,6 +284,8 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f0f0ed;color:#1a1a1
     <button class="tab active" id="tabOrders" onclick="switchTab('orders')">&#128203; Orders</button>
     <button class="tab" id="tabSamples" onclick="switchTab('samples')">&#129525; Samples</button>
     <button class="tab" id="tabCapacity" onclick="switchTab('capacity')">&#128202; Capacity</button>
+    <button class="tab" id="tabAlerts" onclick="switchTab('alerts')">&#9888;&#65039; Alerts</button>
+    <button class="tab" id="tabReport" onclick="switchTab('report')">&#128196; Report</button>
   </div>
 
   <!-- Sidebar -->
@@ -532,13 +534,15 @@ function renderList() {
   list.innerHTML = filtered.map(o => {
     const ri = orders.indexOf(o);
     const isComp = o.tasks && o.tasks['Order Completed'];
+    const urg = getOrderUrgency(o);
+    const urgDot = urg==='critical'?'<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#e53e3e;margin-left:4px;vertical-align:middle" title="Critical delays"></span>':urg==='warning'?'<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#f59e0b;margin-left:4px;vertical-align:middle" title="Delays detected"></span>':'';
     const taskCols = TASK_COLS.filter(t=>t!=='Order Completed');
     const done = taskCols.filter(t=>o.tasks&&o.tasks[t]).length;
     const pct = Math.round(done/taskCols.length*100);
     const sel = ri===selectedIdx ? 'sel' : '';
     const compBadge = isComp ? '<span style="font-size:9px;padding:1px 5px;border-radius:6px;background:#f0fdf4;color:#166534;font-weight:600;margin-left:4px">✓ Done</span>' : '';
     return '<div class="order-item '+sel+'" onclick="selectOrder('+ri+')" style="'+(isComp?'opacity:.6;':'')+'">'+
-      '<div class="oi-top"><span class="oi-id">#'+o.flowId+compBadge+'</span><span style="font-size:10px;color:#aaa">'+done+'/'+taskCols.length+'</span></div>'+
+      '<div class="oi-top"><span class="oi-id">#'+o.flowId+compBadge+urgDot+'</span><span style="font-size:10px;color:#aaa">'+done+'/'+taskCols.length+'</span></div>'+
       '<div class="oi-style">'+o.style+' <span style="font-weight:400;color:#888">'+o.color+'</span></div>'+
       '<div class="oi-meta">'+o.buyer+' · '+o.product+' · '+o.season+'</div>'+
       '<div class="progress-bar"><div class="progress-fill" style="width:'+pct+'%"></div></div>'+
@@ -560,16 +564,36 @@ function renderOrder() {
     return;
   }
   const o = orders[selectedIdx];
-  const done = TASK_COLS.filter(t=>o.tasks&&o.tasks[t]).length;
-  const pct = Math.round(done/TASK_COLS.length*100);
-  let html = '<div class="main-header"><h2>'+o.style.trim()+' — '+o.color.trim()+' <span style="font-weight:400;font-size:13px;color:#888">(Flow #'+o.flowId+')</span></h2>'+
-    '<p>'+o.buyer+' · '+o.product+' · '+o.season+' · Qty: '+(o.qty||0).toLocaleString()+'</p>'+
-    '<div class="main-meta">'+
+  const taskCols26 = TASK_COLS.filter(t=>t!=='Order Completed');
+  const done = taskCols26.filter(t=>o.tasks&&o.tasks[t]&&!o.tasks[t].includes('(planned)')).length;
+  const pct = Math.round(done/taskCols26.length*100);
+  const delays = getDelays(o);
+  const urgency = getOrderUrgency(o);
+  const urgColor = urgency==='critical'?'#e53e3e':urgency==='warning'?'#f59e0b':'#1a6b4a';
+  const delayBanner = delays.length > 0
+    ? '<div style="margin-top:8px;padding:8px 12px;background:'+(urgency==='critical'?'#fef2f2':'#fff8e1')+';border-radius:8px;border-left:3px solid '+urgColor+'">'+
+        '<div style="font-size:11px;font-weight:700;color:'+urgColor+';margin-bottom:4px">'+
+          (urgency==='critical'?'⚠ CRITICAL — ':'⚠ ')+delays.length+' task'+(delays.length>1?'s':'')+' behind schedule</div>'+
+        delays.slice(0,3).map(d=>'<div style="font-size:11px;color:#555">• '+d.task+' — <strong>'+d.daysLate+' days late</strong> (was due '+d.planned+')</div>').join('')+
+        (delays.length>3?'<div style="font-size:11px;color:#888">+ '+(delays.length-3)+' more...</div>':'')+
+      '</div>'
+    : '';
+  let html = '<div class="main-header">'+
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
+      '<div>'+
+        '<h2>'+o.style.trim()+' — '+o.color.trim()+' <span style="font-weight:400;font-size:13px;color:#888">(Flow #'+o.flowId+')</span></h2>'+
+        '<p style="font-size:12px;color:#888;margin-top:2px">'+o.buyer+' · '+o.product+' · '+o.season+' · Qty: '+(o.qty||0).toLocaleString()+'</p>'+
+      '</div>'+
+      '<button onclick="applyTNA('+selectedIdx+')" style="font-size:11px;padding:5px 10px;border-radius:6px;border:1px solid #1a6b4a;background:#f0f9f5;color:#1a6b4a;cursor:pointer;white-space:nowrap;flex-shrink:0">&#128197; Auto TNA</button>'+
+    '</div>'+
+    '<div class="main-meta" style="margin-top:8px">'+
     '<span class="meta-it"><strong>Deadline:</strong> '+(o.deadline||'—')+'</span>'+
     '<span class="meta-it"><strong>Ex-Factory:</strong> '+(o.exFactory||'—')+'</span>'+
     '<span class="meta-it"><strong>PO:</strong> '+(o.po||'—')+'</span>'+
-    '<span class="meta-it" style="color:'+(pct===100?'#1a6b4a':'#c47a00')+'"><strong>'+done+'/'+TASK_COLS.length+'</strong> tasks ('+pct+'%)</span>'+
-    '</div></div><div class="tasks-scroll">';
+    '<span class="meta-it" style="color:'+urgColor+'"><strong>'+done+'/'+taskCols26.length+'</strong> tasks ('+pct+'%)</span>'+
+    '</div>'+
+    delayBanner+
+    '</div><div class="tasks-scroll">';
   for(const [grp, tasks] of Object.entries(TASK_GROUPS)) {
     html += '<div class="task-section"><div class="task-section-title">'+grp+'</div><div class="tasks-row">';
     for(const t of tasks) {
@@ -597,8 +621,25 @@ function renderOrder() {
     }
     html += '</div></div>';
   }
+  // Remarks section
+  const remarks = o.remarks || '';
+  html += '<div class="task-section">'+
+    '<div class="task-section-title">Remarks</div>'+
+    '<div style="background:#fff;border:1px solid #e4e4e0;border-radius:8px;padding:12px">'+
+      '<textarea id="remarksInput" style="width:100%;font-size:12px;font-family:inherit;border:none;outline:none;resize:vertical;min-height:60px;color:#1a1a18;line-height:1.5" placeholder="Add notes, buyer comments, delays, anything relevant..." onblur="saveRemarks('+selectedIdx+',this.value)">'+esc(remarks)+'</textarea>'+
+      '<div style="font-size:10px;color:#aaa;margin-top:4px">Changes save automatically when you click away</div>'+
+    '</div>'+
+  '</div>';
+
   html += '</div>';
   panel.innerHTML = html;
+}
+
+function saveRemarks(idx, text){
+  if(!orders[idx]) return;
+  orders[idx].remarks = text;
+  save();
+  if(syncEnabled && gsUrl) pushTask(orders[idx].flowId, 'Remarks', text).catch(()=>{});
 }
 
 function toggleTask(idx, taskName) {
@@ -763,12 +804,15 @@ function delSample(id) {
 // ═══════════════════════════════════════
 function switchTab(tab) {
   activeTab = tab;
-  document.getElementById('tabOrders').classList.toggle('active', tab==='orders');
-  document.getElementById('tabSamples').classList.toggle('active', tab==='samples');
-  document.getElementById('tabCapacity').classList.toggle('active', tab==='capacity');
+  ['tabOrders','tabSamples','tabCapacity','tabAlerts','tabReport'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.classList.toggle('active', id === 'tab'+tab.charAt(0).toUpperCase()+tab.slice(1));
+  });
   if(tab==='orders') renderOrder();
   else if(tab==='samples') renderSamples();
-  else renderCapacity();
+  else if(tab==='capacity') renderCapacity();
+  else if(tab==='alerts') renderAlerts();
+  else if(tab==='report') renderReport();
 }
 
 // ═══════════════════════════════════════
@@ -1209,6 +1253,361 @@ async function manualSync(){
 }
 
 
+
+// ── Buyer-specific TNA (FORWARD: days from Order Date) ───────
+// Source: your actual TNA templates from Opta
+const TNA_TEMPLATES = {
+
+  // COBB — 88 days total
+  'COBB': {
+    'Fabric Order': 4, 'Trims Order': 3, 'Trims Approval': 1,
+    'Trims Payment': 4, 'Labdips': 11, 'Bulk Fabric In-house': 49,
+    'Fit Sample Indent': 10, 'Fit Sample Dispatch': 14, 'Fit Sample Approval': 22,
+    'Trims In-House': 16, 'PP Sample Indent': 51, 'PP Sample Dispatch': 55,
+    'PP Sample Recieve': 59, 'PP Sample Approval': 51,
+    'Cutting': 58, 'Sewing': 68, 'Inline Inspection': 73,
+    'Finishing': 79, 'Packing': 82, 'Final Inspection': 84,
+    'Shipment Sample Dispatch': 84, 'Shipment Sample Approval': 88,
+    'Ex-Factory': 88
+  },
+
+  // OWND — 73 days total (also used for STYLI)
+  'OWND': {
+    'Fabric Order': 4, 'Trims Order': 3, 'Trims Approval': 1,
+    'Trims Payment': 4, 'Labdips': 22, 'Bulk Fabric In-house': 34,
+    'Fit Sample Dispatch': 4, 'Fit Sample Approval': 12,
+    'Trims In-House': 16, 'PP Sample Dispatch': 38,
+    'GPT Indent To Testing Agency': 39, 'GPT Approval': 46,
+    'PP Sample Approval': 48, 'Cutting': 52, 'Sewing': 62,
+    'Inline Inspection': 65, 'Finishing': 70, 'Packing': 71,
+    'Final Inspection': 73, 'Ex-Factory': 73
+  },
+
+  // MUFTI — 65 days total
+  'MUFTI': {
+    'Fabric Order': 4, 'Trims Order': 1, 'Trims Approval': 2,
+    'Trims Payment': 2, 'Labdips': 14, 'Bulk Fabric In-house': 39,
+    'Fit Sample Dispatch': 6, 'Fit Sample Approval': 11,
+    'Trims In-House': 12, 'PP Sample Dispatch': 42,
+    'FPT Approval': 45, 'PP Sample Recieve': 45,
+    'GPT Indent To Testing Agency': 46, 'GPT Approval': 45,
+    'PP Sample Approval': 47, 'Cutting': 43, 'Sewing': 53,
+    'Inline Inspection': 53, 'Finishing': 58, 'Packing': 61,
+    'Final Inspection': 63, 'Shipment Sample Dispatch': 63,
+    'Shipment Sample Approval': 65, 'Ex-Factory': 65
+  }
+};
+
+// STYLI uses same template as OWND
+TNA_TEMPLATES['STYLI'] = TNA_TEMPLATES['OWND'];
+TNA_TEMPLATES['STYLI WOMEN GCC'] = TNA_TEMPLATES['OWND'];
+
+// Fallback generic template (backward compat)
+const TNA_DAYS = {
+  'Fabric Order': 4, 'Trims Order': 3, 'Trims Approval': 1,
+  'Trims Payment': 4, 'Labdips': 22, 'Bulk Fabric In-house': 34,
+  'Fit Sample Dispatch': 4, 'Fit Sample Approval': 12,
+  'Trims In-House': 16, 'PP Sample Dispatch': 38,
+  'GPT Indent To Testing Agency': 39, 'GPT Approval': 46,
+  'PP Sample Approval': 48, 'Cutting': 52, 'Sewing': 62,
+  'Inline Inspection': 65, 'Finishing': 70, 'Packing': 71,
+  'Final Inspection': 73, 'Ex-Factory': 73
+};
+
+function getTNAForBuyer(buyer){
+  const b = (buyer||'').toUpperCase();
+  for(const [key, tmpl] of Object.entries(TNA_TEMPLATES)){
+    if(b.includes(key)) return tmpl;
+  }
+  return TNA_DAYS;
+}
+
+function addDays(dateStr, days){
+  const d = new Date(dateStr.replace(' ','T'));
+  d.setDate(d.getDate() + days);
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+
+function applyTNA(orderIdx){
+  const o = orders[orderIdx];
+  if(!o){ return; }
+  // Need order date as base
+  const orderDate = o.orderDate || o.deadline;
+  if(!orderDate){
+    alert('Please set an Order Date first. Edit the order and add an Order Date to use Auto TNA.');
+    return;
+  }
+  const tna = getTNAForBuyer(o.buyer);
+  const buyerName = o.buyer || 'generic';
+  const totalDays = Math.max(...Object.values(tna));
+  if(!confirm('Apply '+buyerName+' TNA ('+totalDays+' day template) to '+o.style.trim()+' '+o.color.trim()+'?\n\nBase date: '+orderDate.slice(0,10)+'\nThis fills all empty tasks with planned dates.')) return;
+  if(!o.tasks) o.tasks = {};
+  let filled = 0;
+  const base = orderDate.slice(0,10);
+  Object.entries(tna).forEach(([task, daysForward]) => {
+    if(task === 'Order Completed') return;
+    if(!o.tasks[task]) {
+      o.tasks[task] = addDays(base, daysForward) + ' (planned)';
+      filled++;
+    }
+  });
+  save();
+  renderOrder();
+  const tasksToSync = Object.entries(o.tasks).filter(([,v])=>v&&v.includes('(planned)'));
+  if(syncEnabled) tasksToSync.forEach(([task,val]) => pushTask(o.flowId, task, val).catch(()=>{}));
+  addMsg('assistant', '📅 TNA applied for '+o.style.trim()+' '+o.color.trim()+'\nTemplate: '+buyerName+' ('+totalDays+' days)\nFilled: '+filled+' planned dates\nBase: Order Date '+base+'\n\nPlanned dates show as "(planned)" — replace with actual dates as tasks are completed.');
+}
+
+
+// ── Delay Detection ─────────────────────────────────────────
+function getDelays(o){
+  if(!o.tasks) return [];
+  const today = new Date(); today.setHours(0,0,0,0);
+  const delays = [];
+  const tna = getTNAForBuyer(o.buyer);
+  const base = (o.orderDate || o.deadline || o.exFactory || '').slice(0,10);
+  if(!base) return [];
+
+  Object.entries(tna).forEach(([task, daysForward]) => {
+    if(task === 'Order Completed' || task === 'Ex-Factory') return;
+    const plannedDate = addDays(base, daysForward);
+    const planned = new Date(plannedDate); planned.setHours(0,0,0,0);
+    const val = o.tasks[task];
+
+    if(val && val.includes('(planned)')) {
+      // Planned but not done — check if overdue
+      const pd = new Date(val.replace(' (planned)','').replace(' ','T')); pd.setHours(0,0,0,0);
+      const daysLate = Math.round((today - pd) / 86400000);
+      if(daysLate > 0) delays.push({task, daysLate, planned: val.replace(' (planned)','').slice(0,10), status:'overdue'});
+    } else if(!val) {
+      // Not done — check if planned date has passed
+      const daysLate = Math.round((today - planned) / 86400000);
+      if(daysLate > 1) delays.push({task, daysLate, planned: plannedDate, status:'pending_late'});
+    }
+    // If val exists and no "(planned)" = actually done = no delay
+  });
+  return delays.sort((a,b) => b.daysLate - a.daysLate);
+}
+
+function getOrderUrgency(o){
+  if(!o.exFactory || o.tasks?.['Order Completed']) return 'done';
+  const today = new Date(); today.setHours(0,0,0,0);
+  const ef = new Date(o.exFactory.replace(' ','T')); ef.setHours(0,0,0,0);
+  const daysToEF = Math.round((ef - today) / 86400000);
+  const delays = getDelays(o);
+  if(delays.length > 3 || daysToEF < 7) return 'critical';
+  if(delays.length > 0 || daysToEF < 21) return 'warning';
+  return 'ok';
+}
+
+
+// ═══════════════════════════════════════
+// ALERTS
+// ═══════════════════════════════════════
+function renderAlerts(){
+  const panel = document.getElementById('mainPanel');
+  const today = new Date(); today.setHours(0,0,0,0);
+
+  // Collect all delays across all active orders
+  const allAlerts = [];
+  orders.forEach(o => {
+    if(o.tasks && o.tasks['Order Completed']) return;
+    const delays = getDelays(o);
+    delays.forEach(d => allAlerts.push({...d, order:o, urgency:getOrderUrgency(o)}));
+  });
+
+  // Also orders with ex-factory within 30 days
+  const efSoon = orders.filter(o => {
+    if(o.tasks && o.tasks['Order Completed']) return false;
+    if(!o.exFactory) return false;
+    const ef = new Date(o.exFactory.replace(' ','T')); ef.setHours(0,0,0,0);
+    const days = Math.round((ef - today)/86400000);
+    return days >= 0 && days <= 30;
+  }).sort((a,b) => new Date(a.exFactory) - new Date(b.exFactory));
+
+  const critical = allAlerts.filter(a=>a.urgency==='critical');
+  const warnings = allAlerts.filter(a=>a.urgency==='warning');
+
+  // Group by order
+  const byOrder = {};
+  allAlerts.forEach(a => {
+    const k = a.order.flowId;
+    if(!byOrder[k]) byOrder[k] = {order:a.order, items:[], urgency:a.urgency};
+    byOrder[k].items.push(a);
+    if(a.urgency==='critical') byOrder[k].urgency='critical';
+  });
+  const alertOrders = Object.values(byOrder).sort((a,b)=>{
+    if(a.urgency==='critical' && b.urgency!=='critical') return -1;
+    if(b.urgency==='critical' && a.urgency!=='critical') return 1;
+    return b.items.length - a.items.length;
+  });
+
+  const alertCards = alertOrders.map(({order:o, items, urgency}) => {
+    const ri = orders.indexOf(o);
+    const col = urgency==='critical'?'#e53e3e':'#f59e0b';
+    const bg  = urgency==='critical'?'#fef2f2':'#fff8e1';
+    const rows = items.slice(0,5).map(d =>
+      '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid #f5f5f5">'+
+        '<span style="font-size:12px;color:#444">'+d.task+'</span>'+
+        '<span style="font-size:11px;font-weight:600;color:'+col+'">'+d.daysLate+' days late</span>'+
+      '</div>'
+    ).join('');
+    return '<div style="background:#fff;border:1px solid '+col+'33;border-left:3px solid '+col+';border-radius:10px;padding:14px;margin-bottom:10px;cursor:pointer" onclick="goToOrder('+ri+')">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'+
+        '<div>'+
+          '<span style="font-size:13px;font-weight:600">#'+o.flowId+' '+o.style.trim()+' '+o.color.trim()+'</span>'+
+          '<span style="font-size:11px;color:#888;margin-left:8px">'+o.buyer+' · EF: '+(o.exFactory||'—').slice(0,10)+'</span>'+
+        '</div>'+
+        '<span style="font-size:10px;padding:2px 8px;border-radius:8px;background:'+bg+';color:'+col+';font-weight:700">'+
+          (urgency==='critical'?'CRITICAL':'WARNING')+' · '+items.length+' delay'+(items.length>1?'s':'')+
+        '</span>'+
+      '</div>'+
+      rows+
+      (items.length>5?'<div style="font-size:11px;color:#888;margin-top:4px">+ '+(items.length-5)+' more tasks</div>':'')+
+      '<div style="font-size:11px;color:#888;margin-top:6px">↗ Click to open order</div>'+
+    '</div>';
+  }).join('');
+
+  const efRows = efSoon.map(o => {
+    const ef = new Date(o.exFactory.replace(' ','T')); ef.setHours(0,0,0,0);
+    const days = Math.round((ef - today)/86400000);
+    const col = days<=7?'#e53e3e':days<=14?'#f59e0b':'#1a6b4a';
+    const ri = orders.indexOf(o);
+    return '<tr onclick="goToOrder('+ri+')" style="cursor:pointer">'+
+      '<td style="font-weight:600">#'+o.flowId+'</td>'+
+      '<td>'+o.style.trim()+' '+o.color.trim()+'</td>'+
+      '<td>'+o.buyer+'</td>'+
+      '<td style="font-weight:600;color:'+col+'">'+o.exFactory.slice(0,10)+'</td>'+
+      '<td style="font-weight:700;color:'+col+'">'+days+' days</td>'+
+      '</tr>';
+  }).join('');
+
+  panel.innerHTML =
+    '<div class="main-header" style="flex-shrink:0">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center">'+
+        '<h2 style="font-size:15px;font-weight:600">Alerts & Delays</h2>'+
+        '<div style="display:flex;gap:12px;font-size:12px">'+
+          '<span style="color:#e53e3e;font-weight:600">'+critical.length+' critical</span>'+
+          '<span style="color:#f59e0b;font-weight:600">'+warnings.length+' warnings</span>'+
+        '</div>'+
+      '</div>'+
+    '</div>'+
+    '<div class="dash-wrap">'+
+
+      (efSoon.length ? '<div>'+
+        '<div class="dash-section-title">Ex-Factory in next 30 days</div>'+
+        '<table class="detail-table">'+
+          '<thead><tr><th>Flow ID</th><th>Style</th><th>Buyer</th><th>Ex-Factory</th><th>Days Left</th></tr></thead>'+
+          '<tbody>'+efRows+'</tbody>'+
+        '</table></div>' : '')+
+
+      '<div>'+
+        '<div class="dash-section-title">'+
+          (alertOrders.length ? alertOrders.length+' orders with delays' : 'No delays detected 🎉')+
+        '</div>'+
+        (alertOrders.length ? alertCards : '<div style="text-align:center;padding:40px;color:#888;font-size:13px">All tasks are on track! Set ex-factory dates and use Auto TNA to enable delay tracking.</div>')+
+      '</div>'+
+
+    '</div>';
+}
+
+
+// ═══════════════════════════════════════
+// BUYER REPORT
+// ═══════════════════════════════════════
+function renderReport(){
+  const panel = document.getElementById('mainPanel');
+  const active = orders.filter(o=>!(o.tasks&&o.tasks['Order Completed']));
+  const taskCols26 = TASK_COLS.filter(t=>t!=='Order Completed');
+
+  // Group by buyer
+  const buyers = {};
+  active.forEach(o => {
+    const b = (o.buyer||'Other').trim();
+    if(!buyers[b]) buyers[b] = {name:b, orders:[], totalQty:0, totalTasks:0, doneTasks:0, delayed:0};
+    const done = taskCols26.filter(t=>o.tasks&&o.tasks[t]&&!o.tasks[t].includes('(planned)')).length;
+    const delays = getDelays(o);
+    buyers[b].orders.push({...o, done, delays});
+    buyers[b].totalQty += (parseInt(o.qty)||0);
+    buyers[b].totalTasks += taskCols26.length;
+    buyers[b].doneTasks += done;
+    if(delays.length > 0) buyers[b].delayed++;
+  });
+
+  const buyerList = Object.values(buyers).sort((a,b) => {
+    // Sort by urgency: buyers with delayed orders first
+    return (b.delayed - a.delayed) || (b.totalQty - a.totalQty);
+  });
+
+  const today = new Date(); today.setHours(0,0,0,0);
+
+  const sections = buyerList.map(b => {
+    const pct = b.totalTasks ? Math.round(b.doneTasks/b.totalTasks*100) : 0;
+    const col = bColor(b.name);
+    const orderRows = b.orders.sort((a,z) => {
+      // Sort by ex-factory date
+      const ad = a.exFactory ? new Date(a.exFactory) : new Date('2099-01-01');
+      const zd = z.exFactory ? new Date(z.exFactory) : new Date('2099-01-01');
+      return ad - zd;
+    }).map(o => {
+      const ri = orders.indexOf(o);
+      const opct = Math.round(o.done/taskCols26.length*100);
+      const ef = o.exFactory ? new Date(o.exFactory.replace(' ','T')) : null;
+      const daysToEF = ef ? Math.round((ef-today)/86400000) : null;
+      const efColor = daysToEF===null?'#888':daysToEF<7?'#e53e3e':daysToEF<21?'#f59e0b':'#1a6b4a';
+      // Next pending task
+      const nextTask = taskCols26.find(t=>!o.tasks[t]||o.tasks[t].includes('(planned)'));
+      return '<tr onclick="goToOrder('+ri+')" style="cursor:pointer">'+
+        '<td style="font-weight:600">#'+o.flowId+'</td>'+
+        '<td>'+o.style.trim()+' <span style="color:#888">'+o.color.trim()+'</span></td>'+
+        '<td style="font-weight:600">'+((parseInt(o.qty)||0).toLocaleString())+'</td>'+
+        '<td style="color:'+efColor+';font-weight:600">'+(daysToEF===null?'—':daysToEF<0?'OVERDUE':daysToEF+' days')+'</td>'+
+        '<td>'+
+          '<div style="display:flex;align-items:center;gap:6px">'+
+            '<div class="m-bar-bg" style="min-width:50px;flex:1"><div class="m-bar" style="width:'+opct+'%;background:'+(opct===100?'#1a6b4a':opct>=50?'#f59e0b':'#e53e3e')+'"></div></div>'+
+            '<span style="font-size:11px;color:#888;white-space:nowrap">'+opct+'%</span>'+
+          '</div>'+
+        '</td>'+
+        '<td style="font-size:11px;color:#888">'+(nextTask||'Complete ✓')+'</td>'+
+        '<td>'+(o.delays.length>0?'<span style="font-size:10px;padding:2px 6px;border-radius:6px;background:#fef2f2;color:#991b1b;font-weight:600">'+o.delays.length+' delays</span>':'')+'</td>'+
+        '</tr>';
+    }).join('');
+
+    return '<div style="margin-bottom:24px">'+
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'+
+        '<div style="display:flex;align-items:center;gap:10px">'+
+          '<span style="width:12px;height:12px;border-radius:50%;background:'+col+';display:inline-block"></span>'+
+          '<span style="font-size:14px;font-weight:700">'+b.name+'</span>'+
+          '<span style="font-size:12px;color:#888">'+b.orders.length+' orders · '+b.totalQty.toLocaleString()+' pcs</span>'+
+        '</div>'+
+        '<div style="display:flex;align-items:center;gap:16px">'+
+          (b.delayed>0?'<span style="font-size:11px;color:#e53e3e;font-weight:600">⚠ '+b.delayed+' delayed</span>':'')+
+          '<span style="font-size:11px;color:#888">Overall: <strong style="color:#1a1a18">'+pct+'%</strong></span>'+
+        '</div>'+
+      '</div>'+
+      '<table class="detail-table">'+
+        '<thead><tr><th>Flow ID</th><th>Style</th><th>Qty</th><th>EF in</th><th>Progress</th><th>Next Task</th><th></th></tr></thead>'+
+        '<tbody>'+orderRows+'</tbody>'+
+      '</table>'+
+    '</div>';
+  }).join('');
+
+  const totalActive = active.length;
+  const totalQtyAll = active.reduce((s,o)=>s+(parseInt(o.qty)||0),0);
+  const totalDelayed = active.filter(o=>getDelays(o).length>0).length;
+
+  panel.innerHTML =
+    '<div class="main-header" style="flex-shrink:0">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center">'+
+        '<h2 style="font-size:15px;font-weight:600">Buyer-wise Pending Report</h2>'+
+        '<div style="font-size:11px;color:#888">'+totalActive+' active orders · '+totalQtyAll.toLocaleString()+' pcs · '+totalDelayed+' delayed</div>'+
+      '</div>'+
+    '</div>'+
+    '<div class="dash-wrap">'+
+      (buyerList.length ? sections : '<div style="text-align:center;padding:40px;color:#aaa">No active orders.</div>')+
+    '</div>';
+}
+
 // ═══════════════════════════════════════
 // CAPACITY DASHBOARD
 // ═══════════════════════════════════════
@@ -1325,6 +1724,8 @@ function showMonthOrders(monthKey){
 
   const rows = monthOrders.map(o => {
     const isComp = o.tasks && o.tasks['Order Completed'];
+    const urg = getOrderUrgency(o);
+    const urgDot = urg==='critical'?'<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#e53e3e;margin-left:4px;vertical-align:middle" title="Critical delays"></span>':urg==='warning'?'<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#f59e0b;margin-left:4px;vertical-align:middle" title="Delays detected"></span>':'';
     const ri = orders.indexOf(o);
     const done = TASK_COLS.filter(t=>t!=='Order Completed'&&o.tasks&&o.tasks[t]).length;
     const pct = Math.round(done/(TASK_COLS.length-1)*100);

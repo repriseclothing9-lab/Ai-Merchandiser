@@ -315,49 +315,64 @@ let pollTimer = null;
 // INIT
 // ═══════════════════════════════════════
 function init() {
-  // Load samples
-  try { const s = localStorage.getItem(SAMPLES_KEY); if(s) samples = JSON.parse(s); } catch(e){}
-
-  // Load orders
+  // Always show something immediately from localStorage cache
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
-    if(saved) {
-      const parsed = JSON.parse(saved);
-      if(parsed && parsed.length > 0) { orders = parsed; }
-    }
-  } catch(e) {}
+    if(saved) { const p = JSON.parse(saved); if(p && p.length > 0) orders = p; }
+  } catch(e){}
+  try {
+    const saved = localStorage.getItem(SAMPLES_KEY);
+    if(saved) { const p = JSON.parse(saved); if(p) samples = p; }
+  } catch(e){}
 
-  // Fallback to hardcoded
+  // If no local cache, use hardcoded data as placeholder
   if(!orders || orders.length === 0) {
     orders = JSON.parse(JSON.stringify(ORDERS_DATA));
-    save();
   }
 
   renderList();
   updateStat();
 
-  // Auto-connect Google Sheets
   if(gsUrl) {
+    // SHEETS IS THE SOURCE OF TRUTH — always load from it on startup
     syncEnabled = true;
-    setSyncUI('Reconnecting...', false, true);
+    setSyncUI('Loading from Google Sheets...', false, true);
     gsGet().then(data => {
       if(data && data.orders && data.orders.length > 0) {
-        orders = data.orders.map(o => ({...o, tasks: o.tasks||{}}));
-        TASK_COLS.forEach(t => orders.forEach(o => { if(o.tasks[t]===undefined) o.tasks[t]=null; }));
-        if(data.samples) samples = data.samples;
-        save();
+        // Sheet has data — it wins completely (it's the master record)
+        orders = data.orders.map(o => ({
+          ...o,
+          tasks: o.tasks || {}
+        }));
+        TASK_COLS.forEach(t => orders.forEach(o => {
+          if(o.tasks[t] === undefined) o.tasks[t] = null;
+        }));
+        if(data.samples && data.samples.length > 0) samples = data.samples;
+        save(); saveSamples();
+        addMsg('assistant', '✅ Loaded ' + orders.length + ' orders from Google Sheets.');
+      } else {
+        // Sheet is empty — this is first time, push local data to sheet
+        addMsg('assistant', 'Sheet appears empty. Use "Configure Sync" → Connect to push your orders to the sheet.');
       }
       setSyncUI('Connected — ' + gsUser, true, false);
       startPoll();
       renderList();
+      renderOrder();
       updateStat();
-    }).catch(() => { setSyncUI('Sheets offline — local mode', false, false); });
+    }).catch(err => {
+      setSyncUI('Sheets offline — showing local data', false, false);
+      addMsg('assistant', '⚠️ Could not reach Google Sheets. Showing local data. Changes will sync when connection is restored.');
+    });
   } else {
     setSyncUI('Click "Configure Sync" to connect Google Sheets', false, false);
   }
 
-  // Mic permission
-  if(navigator.mediaDevices) navigator.mediaDevices.getUserMedia({audio:true}).then(s=>{s.getTracks().forEach(t=>t.stop());}).catch(()=>{});
+  // Request mic permission early
+  if(navigator.mediaDevices) {
+    navigator.mediaDevices.getUserMedia({audio:true})
+      .then(s => s.getTracks().forEach(t => t.stop()))
+      .catch(() => {});
+  }
 }
 
 function save() {
@@ -927,8 +942,16 @@ async function gsPost(body){
   return r.json();
 }
 async function pushTask(flowId,task,value){
+  // Always save locally first (immediate, never lost)
+  save();
+  // Then push to Sheets (async, best effort)
   if(!syncEnabled||!gsUrl)return;
-  try{await gsPost({action:'updateTask',flowId,task,value:value||'',user:gsUser});}catch(e){}
+  try{
+    await gsPost({action:'updateTask',flowId,task,value:value||'',user:gsUser});
+  }catch(e){
+    // Push failed — will be picked up on next manual sync
+    console.warn('Task sync failed, saved locally:', task, e.message);
+  }
 }
 
 function startPoll(){
@@ -943,12 +966,21 @@ function startPoll(){
       data.orders.forEach(so=>{
         if(!so||!so.flowId)return;
         if(!localById[so.flowId]){
+          // New order from sheet
           so.tasks=so.tasks||{};
           TASK_COLS.forEach(t=>{if(so.tasks[t]===undefined)so.tasks[t]=null;});
-          orders.unshift(so);added++;
+          orders.push(so); added++;
         } else {
+          // Merge: keep BOTH local AND sheet completions (never lose data)
           const local=localById[so.flowId];
-          if(so.tasks){Object.keys(so.tasks).forEach(t=>{if(so.tasks[t]&&!local.tasks[t])local.tasks[t]=so.tasks[t];});}
+          if(!local.tasks) local.tasks={};
+          if(so.tasks){
+            TASK_COLS.forEach(t=>{
+              // If either local or sheet has a value, keep it
+              if(so.tasks[t] && !local.tasks[t]) local.tasks[t]=so.tasks[t];
+              // (local value already wins if set)
+            });
+          }
         }
       });
       if(data.samples)samples=data.samples;
@@ -978,16 +1010,36 @@ async function connectSheets(){
   localStorage.setItem(GS_URL_KEY,url);localStorage.setItem(GS_USER_KEY,name);
   setSyncUI('Connecting...', false, true);
   try{
-    const safeOrders=orders.map(o=>({...o,tasks:o.tasks||{}}));
-    const res=await gsPost({action:'initSheet',orders:safeOrders,user:name});
-    if(res.error)throw new Error(res.error);
-    syncEnabled=true;
-    document.getElementById('syncDoneInfo').textContent=(res.ordersWritten||orders.length)+' orders synced as "'+name+'"';
-    document.getElementById('syncModalMain').style.display='none';
-    document.getElementById('syncModalDone').style.display='block';
-    setSyncUI('Connected — '+name, true, false);
-    startPoll();
-    addMsg('assistant','✅ Google Sheets connected! '+orders.length+' orders pushed.\n\nAdd new orders in the sheet — they appear here every 30 seconds.');
+    // First check if sheet already has data
+    const existing = await gsGet();
+    
+    if(existing && existing.orders && existing.orders.length > 0) {
+      // Sheet already has data — load it (don't overwrite!)
+      orders = existing.orders.map(o => ({...o, tasks: o.tasks||{}}));
+      TASK_COLS.forEach(t => orders.forEach(o => { if(o.tasks[t]===undefined) o.tasks[t]=null; }));
+      if(existing.samples && existing.samples.length > 0) samples = existing.samples;
+      save(); saveSamples();
+      syncEnabled = true;
+      document.getElementById('syncDoneInfo').textContent = 'Loaded ' + orders.length + ' orders from existing sheet as "' + name + '"';
+      document.getElementById('syncModalMain').style.display='none';
+      document.getElementById('syncModalDone').style.display='block';
+      setSyncUI('Connected — '+name, true, false);
+      startPoll();
+      renderList(); renderOrder(); updateStat();
+      addMsg('assistant','✅ Connected! Loaded '+orders.length+' orders from your Google Sheet.\n\nAll your existing data is safe — nothing was overwritten.');
+    } else {
+      // Sheet is empty — push local data to initialise it
+      const safeOrders = orders.map(o => ({...o, tasks: o.tasks||{}}));
+      const res = await gsPost({action:'initSheet', orders: safeOrders, user: name});
+      if(res.error) throw new Error(res.error);
+      syncEnabled = true;
+      document.getElementById('syncDoneInfo').textContent = (res.ordersWritten||orders.length) + ' orders pushed to sheet as "' + name + '"';
+      document.getElementById('syncModalMain').style.display='none';
+      document.getElementById('syncModalDone').style.display='block';
+      setSyncUI('Connected — '+name, true, false);
+      startPoll();
+      addMsg('assistant','✅ Google Sheets connected! '+orders.length+' orders pushed to your sheet.\n\nAdd new orders in the sheet — they appear here every 30 seconds.');
+    }
   }catch(e){
     setSyncUI('Connection failed', false, false);
     addMsg('assistant','❌ Connection failed: '+e.message+'\n\nCheck:\n• Full Web App URL pasted\n• Deployment set to "Anyone"\n• Clicked Authorize during setup');

@@ -733,7 +733,7 @@ function renderSamples() {
         '<div class="s-form-grid">'+
           '<div><label class="s-label">Name</label><input id="sfName" class="s-input" placeholder="e.g. SKYLAR Fit Sample"></div>'+
           '<div><label class="s-label">Style</label><input id="sfStyle" class="s-input" placeholder="e.g. SKYLAR"></div>'+
-          '<div><label class="s-label">Type</label><select id="sfType" class="s-input"><option>Fit Sample</option><option>PP Sample</option><option>Shipment Sample</option><option>Counter Sample</option><option>Photo Sample</option><option>Salesman Sample</option></select></div>'+
+          '<div><label class="s-label">Type</label><select id="sfType" class="s-input"><option>Development Sample</option><option>Fit Sample</option><option>PP Sample</option><option>Shipment Sample</option><option>Counter Sample</option><option>Photo Sample</option><option>Salesman Sample</option></select></div>'+
           '<div><label class="s-label">Buyer</label><input id="sfBuyer" class="s-input" placeholder="OWND, MUFTI..."></div>'+
           '<div><label class="s-label">Qty (pcs)</label><input id="sfQty" class="s-input" type="number" placeholder="3"></div>'+
           '<div><label class="s-label">Sent?</label><select id="sfSent" class="s-input"><option value="0">Not sent</option><option value="1">Sent</option></select></div>'+
@@ -1046,7 +1046,7 @@ function parseNewOrder(text){
 
 function parseNewSample(text){
   const t=text.toLowerCase();
-  const types=['Shipment Sample','PP Sample','Fit Sample','Counter Sample','Photo Sample','Salesman Sample'];
+  const types=['Development Sample','Shipment Sample','PP Sample','Fit Sample','Counter Sample','Photo Sample','Salesman Sample'];
   let type='Fit Sample';for(const tp of types)if(t.includes(tp.toLowerCase())){type=tp;break;}
   let status='Pending Dispatch',sent=false;
   if(/sent|dispatch/.test(t)){status='Dispatched';sent=true;}

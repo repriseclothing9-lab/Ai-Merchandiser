@@ -165,6 +165,12 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
 .s-del{background:none;border:none;cursor:pointer;color:var(--border2);font-size:13px;padding:2px 5px;border-radius:4px;transition:all .15s}
 .s-del:hover{color:#e53e3e;background:#fff5f5}
 .s-date{font-size:10px;color:var(--text3);margin-left:auto}
+.awb-row{display:flex;align-items:center;gap:8px;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)}
+.awb-input{flex:1;font-size:11px;padding:5px 9px;border:1px solid var(--border);border-radius:6px;font-family:inherit;outline:none;background:var(--surface2);color:var(--text);transition:all .15s}
+.awb-input:focus{border-color:var(--accent);background:#fff}
+.awb-badge{font-size:10px;padding:3px 9px;border-radius:20px;background:#e8f5e9;color:#1a6b4a;font-weight:600;letter-spacing:.02em;white-space:nowrap}
+.awb-wa-btn{font-size:11px;padding:5px 10px;border-radius:6px;border:none;background:#25d366;color:#fff;cursor:pointer;font-family:inherit;font-weight:600;white-space:nowrap;display:flex;align-items:center;gap:4px;transition:all .15s}
+.awb-wa-btn:hover{background:#128c4e}
 .s-add-btn{font-size:12px;padding:7px 16px;border-radius:var(--radius-sm);border:none;background:var(--accent);color:#fff;cursor:pointer;font-family:inherit;font-weight:500;box-shadow:0 1px 4px rgba(45,106,79,.2);transition:all .15s}
 .s-add-btn:hover{background:var(--accent2)}
 .s-form{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:12px;flex-shrink:0;box-shadow:var(--shadow)}
@@ -692,6 +698,19 @@ function renderSamples() {
             '</select>'+
             (s.date?'<span class="s-date">'+s.date+'</span>':'')+
           '</div>'+
+          '<div class="awb-row">'+
+            (s.awb
+              ? '<span class="awb-badge">📦 AWB: '+esc(s.awb)+'</span>'+
+                '<span style="font-size:10px;color:var(--text3)">Shree Maruti Courier</span>'+
+                '<button class="awb-wa-btn" onclick="sendSampleWA(\''+s.id+'\')" title="Send WhatsApp">'+
+                  '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>'+
+                  'Send to Buyer'+
+                '</button>'+
+                '<button onclick="editAWB(\''+s.id+'\')" style="font-size:10px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:transparent;cursor:pointer;color:var(--text3)">Edit</button>'
+              : '<input class="awb-input" placeholder="Enter AWB / tracking number..." onblur="saveAWB(\''+s.id+'\',this.value)" onkeydown="if(event.key===\'Enter\')this.blur()">'+
+                '<span style="font-size:10px;color:var(--text3);white-space:nowrap">Shree Maruti</span>'
+            )+
+          '</div>'+
         '</div>';
       }).join('');
 
@@ -719,7 +738,10 @@ function renderSamples() {
           '<div><label class="s-label">Qty (pcs)</label><input id="sfQty" class="s-input" type="number" placeholder="3"></div>'+
           '<div><label class="s-label">Sent?</label><select id="sfSent" class="s-input"><option value="0">Not sent</option><option value="1">Sent</option></select></div>'+
         '</div>'+
-        '<input id="sfNotes" class="s-input" placeholder="Notes (optional)" style="width:100%;margin-bottom:8px">'+
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px">'+
+          '<div><label class="s-label">AWB / Tracking No.</label><input id="sfAwb" class="s-input" placeholder="e.g. SM123456789"></div>'+
+          '<div><label class="s-label">Notes</label><input id="sfNotes" class="s-input" placeholder="Optional notes"></div>'+
+        '</div>'+
         '<div class="s-form-btns">'+
           '<button class="s-btn" onclick="showSampleForm(false)">Cancel</button>'+
           '<button class="s-btn s-btn-p" onclick="addSample()">Add Sample</button>'+
@@ -749,6 +771,7 @@ function addSample() {
     status:'Pending Dispatch',
     sent:document.getElementById('sfSent').value==='1',
     notes:(document.getElementById('sfNotes').value||'').trim(),
+    awb:(document.getElementById('sfAwb').value||'').trim(),
     date:fmtNow().slice(0,10)
   };
   if(s.sent) s.status='Dispatched';
@@ -1904,6 +1927,105 @@ function openWA(){
   const msg = modal._msg;
   const encoded = encodeURIComponent(msg);
   window.open('https://wa.me/?text=' + encoded, '_blank');
+}
+
+
+// ── AWB / Tracking Functions ────────────────────────────────────
+function saveAWB(id, awb){
+  const s = samples.find(x=>x.id===id);
+  if(!s || !awb.trim()) return;
+  s.awb = awb.trim();
+  if(s.status === 'Pending Dispatch') {
+    s.status = 'Dispatched';
+    s.sent = true;
+    if(!s.date) s.date = fmtNow().slice(0,10);
+  }
+  saveSamples();
+  if(activeTab==='samples') renderSamples();
+  if(syncEnabled) gsPost({action:'updateSample',sample:s}).catch(()=>{});
+  addMsg('assistant', '📦 AWB saved for '+s.name+'\nTracking: '+s.awb+'\nStatus updated to Dispatched. Tap "Send to Buyer" to share on WhatsApp.');
+}
+
+function editAWB(id){
+  const s = samples.find(x=>x.id===id);
+  if(!s) return;
+  const newAwb = prompt('Edit AWB / tracking number:', s.awb||'');
+  if(newAwb === null) return;
+  s.awb = newAwb.trim();
+  saveSamples();
+  if(activeTab==='samples') renderSamples();
+  if(syncEnabled) gsPost({action:'updateSample',sample:s}).catch(()=>{});
+}
+
+function sendSampleWA(id){
+  const s = samples.find(x=>x.id===id);
+  if(!s) return;
+
+  const dispatchDate = s.date || fmtNow().slice(0,10);
+  const formattedDate = new Date(dispatchDate).toLocaleDateString('en-IN',{day:'2-digit',month:'long',year:'numeric'});
+
+  const msg =
+    'Dear Team,\n\n' +
+    'Please note that your *' + (s.type||'Sample') + '* has been dispatched via *Shree Maruti Courier*.\n\n' +
+    '*Details:*\n' +
+    '• Style: *' + (s.style||s.name) + '*\n' +
+    (s.name !== s.style ? '• Sample: *' + s.name + '*\n' : '') +
+    (s.qty ? '• Quantity: *' + s.qty + ' pcs*\n' : '') +
+    '• Dispatch Date: *' + formattedDate + '*\n' +
+    '• Courier: *Shree Maruti Courier*\n' +
+    '• AWB No.: *' + (s.awb||'—') + '*\n' +
+    (s.notes ? '• Notes: ' + s.notes + '\n' : '') +
+    '\nYou can track your shipment using the AWB number on the Shree Maruti Courier website.\n\n' +
+    'Please confirm receipt.\n\n' +
+    'Regards,\n' +
+    'Asha Creations';
+
+  // Show modal
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center';
+
+  const card = document.createElement('div');
+  card.style.cssText = 'background:#fff;border-radius:14px;padding:24px;width:500px;max-width:95vw;max-height:90vh;display:flex;flex-direction:column;gap:14px;box-shadow:0 20px 60px rgba(0,0,0,.2)';
+
+  const hdr = document.createElement('div');
+  hdr.style.cssText = 'display:flex;justify-content:space-between;align-items:center';
+  hdr.innerHTML = '<div><div style="font-size:15px;font-weight:600">WhatsApp to Buyer</div><div style="font-size:11px;color:#888;margin-top:2px">'+s.name+' — AWB: '+(s.awb||'—')+'</div></div>';
+  const closeX = document.createElement('button');
+  closeX.textContent = '✕';
+  closeX.style.cssText = 'background:none;border:none;font-size:18px;cursor:pointer;color:#888';
+  closeX.onclick = () => modal.remove();
+  hdr.appendChild(closeX);
+
+  const preview = document.createElement('div');
+  preview.style.cssText = 'background:#e8f5e9;border-radius:10px;padding:14px;overflow-y:auto;max-height:320px;font-size:12px;white-space:pre-wrap;line-height:1.6;color:#1a1a18;font-family:inherit';
+  preview.textContent = msg;
+
+  const btnRow = document.createElement('div');
+  btnRow.style.cssText = 'display:flex;gap:8px';
+
+  const copyBtn = document.createElement('button');
+  copyBtn.textContent = '📋 Copy';
+  copyBtn.style.cssText = 'flex:1;padding:10px;border-radius:8px;border:1px solid #ddd;background:#fff;cursor:pointer;font-size:13px;font-family:inherit';
+  copyBtn.onclick = () => {
+    navigator.clipboard.writeText(msg).then(()=>{
+      copyBtn.textContent = '✅ Copied!';
+      setTimeout(()=>copyBtn.textContent='📋 Copy', 2000);
+    });
+  };
+
+  const waBtn = document.createElement('button');
+  waBtn.innerHTML = '📱 Open WhatsApp';
+  waBtn.style.cssText = 'flex:1;padding:10px;border-radius:8px;border:none;background:#25d366;color:#fff;cursor:pointer;font-size:13px;font-weight:600;font-family:inherit';
+  waBtn.onclick = () => window.open('https://wa.me/?text='+encodeURIComponent(msg), '_blank');
+
+  btnRow.appendChild(copyBtn);
+  btnRow.appendChild(waBtn);
+  card.appendChild(hdr);
+  card.appendChild(preview);
+  card.appendChild(btnRow);
+  modal.appendChild(card);
+  document.body.appendChild(modal);
+  modal.addEventListener('click', e=>{ if(e.target===modal) modal.remove(); });
 }
 
 // ═══════════════════════════════════════

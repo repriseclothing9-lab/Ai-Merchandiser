@@ -228,7 +228,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
 .dash-kpi:nth-child(1)::before{background:var(--gold-shine)}
 .dash-kpi:nth-child(2)::before{background:linear-gradient(to right,var(--blue),var(--blue-mid))}
 .dash-kpi:nth-child(3)::before{background:linear-gradient(to right,var(--green),var(--green-mid))}
-.dash-kpi-n{font-size:22px;font-weight:700;color:var(--text);letter-spacing:-.02em;word-break:break-all}
+.dash-kpi-n{font-size:20px;font-weight:700;color:var(--text);letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .dash-kpi-l{font-size:11px;color:var(--text3);margin-top:2px;letter-spacing:.02em}
 .month-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(185px,1fr));gap:10px}
 .m-card{background:var(--white);border:1.5px solid var(--border);border-radius:var(--radius);padding:16px;position:relative;cursor:pointer;transition:all .2s;box-shadow:var(--shadow)}
@@ -313,6 +313,10 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
 .hp-enter{font-size:13px;padding:12px 32px;border-radius:24px;border:none;background:linear-gradient(135deg,#C9A84C,#E8CC7A,#9A7A2E);color:#1C1917;font-weight:700;letter-spacing:.08em;cursor:pointer;font-family:inherit;box-shadow:0 4px 16px rgba(201,168,76,.3);animation:hpUp .6s ease .65s both;transition:all .2s}
 .hp-enter:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(201,168,76,.4)}
 @keyframes hpUp{from{transform:translateY(12px);opacity:0}to{transform:translateY(0);opacity:1}}
+
+/* Hide mobile-only elements on desktop */
+.mob-nav { display: none; }
+.mob-back-btn { display: none; }
 
 /* ── MOBILE LAYOUT ── */
 @media (max-width: 768px) {
@@ -2072,7 +2076,7 @@ function renderCapacity(){
       '<div><div class="dash-section-title">Overview</div>'+
         '<div style="display:grid;grid-template-columns:repeat(3,1fr) 300px;gap:12px;align-items:stretch">'+
           '<div class="dash-kpi"><div class="dash-kpi-n">'+orders.length+'</div><div class="dash-kpi-l">Active Orders</div></div>'+
-          '<div class="dash-kpi"><div class="dash-kpi-n">'+totalQty.toLocaleString()+'</div><div class="dash-kpi-l">Total Pieces</div></div>'+
+          '<div class="dash-kpi"><div class="dash-kpi-n" style="font-size:clamp(14px,2vw,26px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+totalQty.toLocaleString()+'">'+totalQty.toLocaleString()+'</div><div class="dash-kpi-l">Total Pieces</div></div>'+
           '<div class="dash-kpi"><div class="dash-kpi-n">'+months.length+'</div><div class="dash-kpi-l">Months Booked</div></div>'+
           '<div class="dash-kpi" style="display:flex;align-items:center;gap:16px">'+
             '<div style="position:relative;flex-shrink:0">'+

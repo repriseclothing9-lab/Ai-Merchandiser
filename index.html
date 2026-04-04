@@ -277,6 +277,42 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
 ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:10px}
 ::-webkit-scrollbar-thumb:hover{background:var(--text3)}
 ::selection{background:var(--gold-light);color:var(--text)}
+
+/* ── Celebration ── */
+.confetti-container{position:fixed;inset:0;pointer-events:none;z-index:9990;overflow:hidden}
+.confetti-piece{position:absolute;top:-20px;opacity:0;animation:confettiFall linear forwards}
+@keyframes confettiFall{0%{transform:translateY(0) rotate(0deg);opacity:1}100%{transform:translateY(110vh) rotate(720deg);opacity:0}}
+.balloon{position:fixed;bottom:-120px;font-size:48px;animation:balloonRise ease-in forwards;pointer-events:none;z-index:9991}
+@keyframes balloonRise{0%{bottom:-120px;opacity:1}70%{opacity:1}100%{bottom:110vh;opacity:0}}
+.celebration-banner{position:fixed;bottom:30px;left:50%;transform:translateX(-50%) translateY(100px);background:linear-gradient(135deg,#C9A84C,#E8CC7A,#9A7A2E);color:#1C1917;padding:16px 32px;border-radius:50px;font-size:15px;font-weight:700;letter-spacing:.05em;box-shadow:0 8px 32px rgba(201,168,76,.5);z-index:9992;pointer-events:none;white-space:nowrap;opacity:0;transition:all .5s cubic-bezier(.175,.885,.32,1.275)}
+.celebration-banner.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.firework{position:fixed;pointer-events:none;z-index:9991}
+.spark{position:absolute;width:4px;height:4px;border-radius:50%;animation:sparkFly ease-out forwards}
+@keyframes sparkFly{0%{transform:translate(0,0) scale(1);opacity:1}100%{transform:var(--tx) scale(0);opacity:0}}
+
+/* ── Homepage ── */
+#homepage{position:fixed;inset:0;background:#FFFFFF;z-index:998;display:none;flex-direction:column;align-items:center;justify-content:center;gap:24px}
+#homepage.show{display:flex;animation:hpFadeIn .4s ease}
+@keyframes hpFadeIn{from{opacity:0}to{opacity:1}}
+.hp-close{position:absolute;top:20px;right:24px;background:none;border:none;font-size:20px;cursor:pointer;color:#A8A29E;transition:color .15s;font-family:inherit;padding:8px}
+.hp-close:hover{color:#1C1917}
+.hp-logo-wrap{position:relative;width:200px;height:200px;display:flex;align-items:center;justify-content:center}
+.hp-ring{position:absolute;inset:0;border-radius:50%;border:2px solid #C9A84C;animation:hpSpin 8s linear infinite}
+.hp-ring2{position:absolute;inset:10px;border-radius:50%;border:1px solid #F5E6C3;animation:hpSpin 12s linear infinite reverse}
+.hp-ring3{position:absolute;inset:-12px;border-radius:50%;border:1px dashed #F5E6C3;animation:hpSpin 20s linear infinite}
+@keyframes hpSpin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+.hp-logo-img{width:160px;height:160px;border-radius:50%;object-fit:cover;border:3px solid #F5E6C3;box-shadow:0 4px 16px rgba(201,168,76,.25);animation:hpPulse 3s ease-in-out infinite}
+@keyframes hpPulse{0%,100%{box-shadow:0 0 20px rgba(201,168,76,.3)}50%{box-shadow:0 0 40px rgba(201,168,76,.5)}}
+.hp-title{font-size:28px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:#1C1917;animation:hpUp .6s ease .2s both;text-align:center}
+.hp-sub{font-size:13px;color:#A8A29E;letter-spacing:.1em;animation:hpUp .6s ease .35s both;text-align:center}
+.hp-divider{width:80px;height:2px;background:linear-gradient(135deg,#C9A84C,#E8CC7A,#9A7A2E);border-radius:2px;animation:hpUp .6s ease .45s both}
+.hp-stats{display:flex;gap:32px;animation:hpUp .6s ease .55s both}
+.hp-stat{text-align:center}
+.hp-stat-n{font-size:28px;font-weight:700;color:#1C1917}
+.hp-stat-l{font-size:10px;color:#A8A29E;text-transform:uppercase;letter-spacing:.08em;margin-top:4px}
+.hp-enter{font-size:13px;padding:12px 32px;border-radius:24px;border:none;background:linear-gradient(135deg,#C9A84C,#E8CC7A,#9A7A2E);color:#1C1917;font-weight:700;letter-spacing:.08em;cursor:pointer;font-family:inherit;box-shadow:0 4px 16px rgba(201,168,76,.3);animation:hpUp .6s ease .65s both;transition:all .2s}
+.hp-enter:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(201,168,76,.4)}
+@keyframes hpUp{from{transform:translateY(12px);opacity:0}to{transform:translateY(0);opacity:1}}
 </style>
 </head>
 <body>

@@ -314,41 +314,180 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
 .hp-enter:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(201,168,76,.4)}
 @keyframes hpUp{from{transform:translateY(12px);opacity:0}to{transform:translateY(0);opacity:1}}
 
-/* ── Mobile Responsive ── */
+/* ── MOBILE LAYOUT ── */
 @media (max-width: 768px) {
-  .app{grid-template-columns:1fr;grid-template-rows:52px auto auto 1fr auto;height:100vh}
-  .topbar h1{font-size:10px}
-  .topbar{padding:0 12px}
-  .t-stat{display:none}
-  .btn-dim{display:none}
-  .sidebar{grid-column:1;grid-row:4;border-right:none;border-top:1px solid var(--border);height:220px;flex-direction:column}
-  .main{grid-column:1;grid-row:3;min-height:0}
-  .chat{grid-column:1;grid-row:5;height:220px;border-left:none;border-top:1px solid var(--border)}
-  .tabs{grid-column:1;overflow-x:auto;flex-wrap:nowrap}
-  .tab{padding:10px 12px;font-size:11px;white-space:nowrap}
-  .sync-banner{grid-column:1;font-size:10px;padding:5px 12px}
-  .tasks-row{grid-template-columns:repeat(2,1fr)}
-  .month-grid{grid-template-columns:repeat(2,1fr)}
-  .dash-summary{grid-template-columns:repeat(2,1fr)}
-  .s-form-grid{grid-template-columns:repeat(2,1fr)}
-  .main-header{padding:12px 14px}
-  .main-header h2{font-size:14px}
-  .tasks-scroll{padding:12px}
-  .order-list{max-height:150px}
-  .sb-filters{overflow-x:auto;flex-wrap:nowrap;padding:6px 8px}
-  .fb{white-space:nowrap}
-  .chat-msgs{padding:8px}
-  .hp-title{font-size:20px}
-  .hp-stats{gap:20px}
-  .hp-stat-n{font-size:22px}
-  .splash-title{font-size:18px}
-  .celebration-banner{font-size:12px;padding:12px 20px;white-space:normal;text-align:center;max-width:90vw}
-}
-@media (max-width: 480px) {
-  .tasks-row{grid-template-columns:1fr 1fr}
-  .main-meta{gap:10px}
-  .month-grid{grid-template-columns:1fr 1fr}
-  .topbar h1{display:none}
+
+  /* ── Reset the 3-col grid to a stacked layout ── */
+  .app {
+    display: flex !important;
+    flex-direction: column !important;
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+  }
+
+  /* Topbar: compact */
+  .topbar {
+    flex-shrink: 0;
+    padding: 0 12px;
+    height: 50px;
+  }
+  .topbar h1 { display: none; }
+  .t-stat { display: none; }
+  .btn-dim { display: none; }
+  .btn { font-size: 11px; padding: 5px 10px; }
+  .btn-green { font-size: 11px; padding: 5px 10px; }
+
+  /* Sync banner: compact */
+  .sync-banner {
+    flex-shrink: 0;
+    padding: 5px 12px;
+    font-size: 10px;
+  }
+  .sync-banner > span:nth-child(3) { display: none; }
+
+  /* Tabs: hide on mobile — use bottom nav instead */
+  .tabs { display: none !important; }
+
+  /* ── The middle content area fills all remaining space ── */
+  .sidebar, .main, .chat {
+    position: fixed;
+    inset: 0;
+    top: 100px; /* below topbar+sync */
+    bottom: 58px; /* above bottom nav */
+    width: 100%;
+    z-index: 10;
+    display: none;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--bg);
+    border: none !important;
+  }
+
+  /* Show active panel */
+  .sidebar.mob-active,
+  .main.mob-active,
+  .chat.mob-active {
+    display: flex;
+  }
+
+  /* Sidebar active state */
+  .sidebar.mob-active {
+    background: var(--white);
+  }
+
+  /* Order list scrollable */
+  .order-list { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .sb-search { flex-shrink: 0; }
+  .sb-filters {
+    flex-shrink: 0;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .sb-filters::-webkit-scrollbar { display: none; }
+  .fb { white-space: nowrap; flex-shrink: 0; }
+
+  /* Main panel: full screen slide-in from right */
+  .main {
+    background: var(--bg);
+    transform: translateX(0);
+  }
+  .tasks-scroll {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .tasks-row { grid-template-columns: 1fr 1fr; gap: 6px; }
+  .task-card { padding: 10px; }
+  .task-name { font-size: 11px; }
+  .main-header { padding: 10px 14px; flex-shrink: 0; }
+  .main-header h2 { font-size: 14px; }
+  .main-meta { gap: 8px; }
+  .meta-it { font-size: 10px; }
+
+  /* Chat */
+  .chat { background: var(--white); }
+  .chat-msgs { flex: 1; overflow-y: auto; padding: 10px; }
+
+  /* Back button */
+  .mob-back-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    background: var(--white);
+    border: none;
+    border-bottom: 1px solid var(--border);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--gold-dark);
+    cursor: pointer;
+    width: 100%;
+    text-align: left;
+    flex-shrink: 0;
+  }
+
+  /* Bottom nav */
+  .mob-nav {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 58px;
+    display: flex !important;
+    background: var(--white);
+    border-top: 1px solid var(--border);
+    z-index: 200;
+    box-shadow: 0 -4px 12px rgba(0,0,0,.06);
+  }
+  .mob-nav-btn {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-family: inherit;
+    color: var(--text3);
+    padding: 6px 0;
+    transition: color .15s;
+  }
+  .mob-nav-btn.active { color: var(--gold-dark); }
+  .mob-nav-icon { font-size: 20px; line-height: 1; }
+  .mob-nav-label { font-size: 9px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; }
+
+  /* Dashboard */
+  .dash-wrap { padding: 12px; gap: 12px; }
+  .dash-summary { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .dash-kpi { padding: 12px; }
+  .dash-kpi-n { font-size: 20px; }
+  .month-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .m-card { padding: 12px; }
+  .m-card-qty { font-size: 20px; }
+  .buyer-row { grid-template-columns: 90px 1fr 55px; gap: 8px; }
+  .detail-table th, .detail-table td { padding: 7px 8px; font-size: 11px; }
+
+  /* Samples */
+  .s-form-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .s-stats { grid-template-columns: repeat(2,1fr); gap: 6px; }
+
+  /* Modal */
+  .modal-card { padding: 18px; width: 95vw; }
+
+  /* Celebration */
+  .celebration-banner { font-size: 12px; padding: 12px 20px; max-width: 90vw; text-align: center; }
+
+  /* Homepage */
+  .hp-title { font-size: 20px; letter-spacing: .1em; }
+  .hp-logo-wrap { width: 150px; height: 150px; }
+  .hp-logo-img { width: 120px; height: 120px; }
 }
 </style>
 </head>
@@ -483,6 +622,30 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
       <button class="send-btn" id="sendBtn" onclick="send()">&#8593;</button>
     </div>
   </div>
+
+  <!-- Mobile Bottom Nav (only on mobile) -->
+  <nav class="mob-nav" id="mobNav" style="display:none">
+    <button class="mob-nav-btn active" id="mbn-orders" onclick="mobSwitch('orders')">
+      <span style="font-size:18px">📋</span>
+      <span class="mob-nav-label">Orders</span>
+    </button>
+    <button class="mob-nav-btn" id="mbn-samples" onclick="mobSwitch('samples')">
+      <span style="font-size:18px">🧵</span>
+      <span class="mob-nav-label">Samples</span>
+    </button>
+    <button class="mob-nav-btn" id="mbn-capacity" onclick="mobSwitch('capacity')">
+      <span style="font-size:18px">📊</span>
+      <span class="mob-nav-label">Capacity</span>
+    </button>
+    <button class="mob-nav-btn" id="mbn-alerts" onclick="mobSwitch('alerts')">
+      <span style="font-size:18px">⚠️</span>
+      <span class="mob-nav-label">Alerts</span>
+    </button>
+    <button class="mob-nav-btn" id="mbn-chat" onclick="mobOpenChat()">
+      <span style="font-size:18px">🎤</span>
+      <span class="mob-nav-label">Assistant</span>
+    </button>
+  </nav>
 
 </div>
 
@@ -2508,6 +2671,116 @@ function shareApp(){
   }
 }
 
+
+// ── Mobile Controller ─────────────────────────────────────────
+const isMob = () => window.innerWidth <= 768;
+let mobCurrentTab = 'orders'; // orders | main | capacity | samples | alerts | chat
+
+function mobInit(){
+  if(!isMob()) return;
+  // Show bottom nav
+  const nav = document.getElementById('mobNav');
+  if(nav) nav.style.display = 'flex';
+  // Start on orders list
+  mobShow('orders');
+  // Patch selectOrder to go to main panel
+  const _orig = window.selectOrder;
+  window.selectOrder = function(idx){
+    _orig(idx);
+    if(isMob()) mobShow('main');
+  };
+}
+
+function mobShow(panel){
+  if(!isMob()) return;
+  mobCurrentTab = panel;
+
+  // Hide all panels
+  ['sidebar','mainPanel','chat'].forEach(id => {
+    const el = document.getElementById(id) || document.querySelector('.'+id);
+    if(el) el.classList.remove('mob-active');
+  });
+  document.querySelector('.sidebar')?.classList.remove('mob-active');
+  document.getElementById('mainPanel')?.classList.remove('mob-active');
+  document.querySelector('.chat')?.classList.remove('mob-active');
+
+  // Update bottom nav active
+  ['orders','samples','capacity','alerts','chat'].forEach(t => {
+    document.getElementById('mbn-'+t)?.classList.toggle('active', t===panel || (panel==='main' && t==='orders'));
+  });
+
+  if(panel === 'orders'){
+    document.querySelector('.sidebar')?.classList.add('mob-active');
+  } else if(panel === 'main'){
+    const main = document.getElementById('mainPanel');
+    if(main){
+      // Ensure back button exists
+      if(!main.querySelector('.mob-back-btn')){
+        const btn = document.createElement('button');
+        btn.className = 'mob-back-btn';
+        btn.innerHTML = '← Orders';
+        btn.onclick = () => mobShow('orders');
+        main.insertBefore(btn, main.firstChild);
+      }
+      main.classList.add('mob-active');
+    }
+    document.getElementById('mbn-orders')?.classList.add('active');
+  } else if(panel === 'chat'){
+    const chat = document.querySelector('.chat');
+    if(chat){
+      if(!chat.querySelector('.mob-back-btn')){
+        const btn = document.createElement('button');
+        btn.className = 'mob-back-btn';
+        btn.innerHTML = '← Back';
+        btn.onclick = () => mobShow(mobCurrentTab==='chat' ? 'orders' : mobCurrentTab);
+        const head = chat.querySelector('.chat-head');
+        head ? head.insertAdjacentElement('afterend', btn) : chat.insertBefore(btn, chat.firstChild);
+      }
+      chat.classList.add('mob-active');
+    }
+  } else {
+    // capacity, samples, alerts, report — use main panel
+    const main = document.getElementById('mainPanel');
+    if(main){
+      if(!main.querySelector('.mob-back-btn')){
+        const btn = document.createElement('button');
+        btn.className = 'mob-back-btn';
+        btn.innerHTML = '← Orders';
+        btn.onclick = () => mobShow('orders');
+        main.insertBefore(btn, main.firstChild);
+      }
+      main.classList.add('mob-active');
+    }
+    switchTab(panel);
+  }
+}
+
+function mobSwitch(tab){
+  if(!isMob()){ switchTab(tab); return; }
+  if(tab === 'orders') mobShow('orders');
+  else mobShow(tab);
+}
+
+function mobOpenChat(){
+  if(!isMob()) return;
+  mobShow('chat');
+}
+
+window.addEventListener('resize', () => {
+  const nav = document.getElementById('mobNav');
+  if(nav) nav.style.display = isMob() ? 'flex' : 'none';
+  if(isMob()) mobShow(mobCurrentTab||'orders');
+  else {
+    // Reset on desktop
+    ['sidebar','mainPanel'].forEach(id => {
+      const el = document.getElementById(id) || document.querySelector('.'+id);
+      if(el) el.classList.remove('mob-active');
+    });
+    document.querySelector('.sidebar')?.classList.remove('mob-active');
+    document.querySelector('.chat')?.classList.remove('mob-active');
+  }
+});
+
 // ── Input events ──
 document.getElementById('chatInput').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}});
 document.getElementById('chatInput').addEventListener('input',function(){this.style.height='34px';this.style.height=Math.min(this.scrollHeight,80)+'px';});
@@ -2515,6 +2788,7 @@ document.getElementById('searchInput').addEventListener('input',()=>renderList()
 
 // ── Start ──
 init();
+setTimeout(mobInit, 100);
 </script>
 </body>
 </html>

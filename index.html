@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>AI Merchandiser</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&display=swap" rel="stylesheet">
@@ -538,6 +540,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
       <button class="btn" onclick="shareApp()">&#128279; Share</button>
       <button class="btn btn-dim" onclick="resetData()">Reset</button>
       <button class="btn btn-green" onclick="exportExcel()">Export Excel</button>
+      <button class="btn" onclick="exportAllPDF()" title="Export all orders as PDF report" style="background:#9A7A2E;border-color:#9A7A2E;color:#fff">&#128196; PDF Report</button>
     </div>
   </div>
 
@@ -975,7 +978,30 @@ function toggleTask(idx, taskName) {
     if(taskName === 'Order Completed') o.tasks[taskName] = null;
     else o.tasks[taskName] = null;
   } else {
-    o.tasks[taskName] = fmtNow();
+    const completionTime = fmtNow();
+    // Check if this task is overdue — ask for delay reason
+    const tna = getTNAForBuyer(o.buyer);
+    const base = (o.orderDate || o.deadline || o.exFactory || '').slice(0,10);
+    if(base && tna[taskName] !== undefined && taskName !== 'Order Completed' && taskName !== 'Ex-Factory'){
+      const plannedDate = addDays(base, tna[taskName]);
+      const today = new Date(); today.setHours(0,0,0,0);
+      const planned = new Date(plannedDate); planned.setHours(0,0,0,0);
+      const daysLate = Math.round((today - planned) / 86400000);
+      if(daysLate > 1){
+        // Task is overdue — ask for reason
+        askDelayReason(taskName, daysLate, (reason) => {
+          o.tasks[taskName] = completionTime;
+          if(reason){
+            if(!o.delayReasons) o.delayReasons = {};
+            o.delayReasons[taskName] = {reason, daysLate, date: completionTime.slice(0,10)};
+          }
+          save(); renderOrder(); renderList();
+          if(syncEnabled && gsUrl) pushTask(o.flowId, taskName, o.tasks[taskName]||'');
+        });
+        return; // Wait for modal response
+      }
+    }
+    o.tasks[taskName] = completionTime;
   }
   save();
   renderOrder();
@@ -2634,6 +2660,342 @@ function celebrate(orderName){
   document.body.appendChild(banner);
   setTimeout(()=>banner.classList.add('show'), 100);
   setTimeout(()=>{ banner.classList.remove('show'); setTimeout(()=>banner.remove(),600); }, 4500);
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// ORDER EDIT
+// ═══════════════════════════════════════════════════════════════
+function showEditOrder(idx){
+  const o = orders[idx];
+  if(!o) return;
+
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center';
+
+  const card = document.createElement('div');
+  card.style.cssText = 'background:#fff;border-radius:14px;padding:24px;width:560px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.18)';
+
+  card.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">' +
+    '<h2 style="font-size:15px;font-weight:700">Edit Order — '+esc(o.style)+' '+esc(o.color)+'</h2>' +
+    '<button id="editClose" style="background:none;border:none;font-size:18px;cursor:pointer;color:#888">✕</button>' +
+    '</div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
+      '<div><label class="s-label">Style</label><input id="eo-style" class="s-input" value="'+esc(o.style)+'"></div>' +
+      '<div><label class="s-label">Color</label><input id="eo-color" class="s-input" value="'+esc(o.color)+'"></div>' +
+      '<div><label class="s-label">Product</label><input id="eo-product" class="s-input" value="'+esc(o.product||'')+'"></div>' +
+      '<div><label class="s-label">Buyer</label>' +
+        '<select id="eo-buyer" class="s-input">' +
+          ['OWND','MUFTI','COBB','STYLI WOMEN GCC','STYLI MEN GCC','STYLI WOMEN B2B','RARE & BASIC WOMEN','RARE & BASIC MEN','SO WHATT','Other']
+            .map(b=>'<option '+(o.buyer===b?'selected':'')+'>'+b+'</option>').join('') +
+        '</select></div>' +
+      '<div><label class="s-label">Order Qty (pcs)</label><input id="eo-qty" class="s-input" type="number" value="'+(o.qty||0)+'"></div>' +
+      '<div><label class="s-label">Season</label><input id="eo-season" class="s-input" value="'+esc(o.season||'')+'"></div>' +
+      '<div><label class="s-label">Internal PO</label><input id="eo-po" class="s-input" value="'+esc(o.po||'')+'"></div>' +
+      '<div><label class="s-label">Order Date</label><input id="eo-odate" class="s-input" type="date" value="'+(o.orderDate||'').slice(0,10)+'"></div>' +
+      '<div><label class="s-label">Ex-Factory Date</label><input id="eo-ef" class="s-input" type="date" value="'+(o.exFactory||'').slice(0,10)+'"></div>' +
+      '<div><label class="s-label">Merchant</label><input id="eo-merchant" class="s-input" value="'+esc(o.merchant||'')+'"></div>' +
+    '</div>' +
+    '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">' +
+      '<button id="editCancel" class="s-btn">Cancel</button>' +
+      '<button id="editSave" class="s-btn s-btn-p">Save Changes</button>' +
+    '</div>';
+
+  modal.appendChild(card);
+  document.body.appendChild(modal);
+
+  document.getElementById('editClose').onclick = () => modal.remove();
+  document.getElementById('editCancel').onclick = () => modal.remove();
+  modal.addEventListener('click', e => { if(e.target===modal) modal.remove(); });
+
+  document.getElementById('editSave').onclick = () => {
+    o.style   = document.getElementById('eo-style').value.trim();
+    o.color   = document.getElementById('eo-color').value.trim();
+    o.product = document.getElementById('eo-product').value.trim();
+    o.buyer   = document.getElementById('eo-buyer').value;
+    o.qty     = parseInt(document.getElementById('eo-qty').value)||0;
+    o.season  = document.getElementById('eo-season').value.trim();
+    o.po      = document.getElementById('eo-po').value.trim();
+    o.orderDate = document.getElementById('eo-odate').value;
+    o.exFactory = document.getElementById('eo-ef').value;
+    o.deadline  = o.exFactory;
+    o.merchant  = document.getElementById('eo-merchant').value.trim();
+    save();
+    renderOrder();
+    renderList();
+    modal.remove();
+    if(syncEnabled) gsPost({action:'updateOrder', order:o}).catch(()=>{});
+    addMsg('assistant', '✅ Order updated: '+o.style+' '+o.color);
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// DELAY REASON MODAL
+// ═══════════════════════════════════════════════════════════════
+const DELAY_REASONS = [
+  'Fabric delay from mill',
+  'Trims / accessories delay',
+  'Buyer approval pending',
+  'Fit correction required',
+  'Lab / testing delay',
+  'Factory capacity issue',
+  'Public holiday',
+  'Payment hold',
+  'Design change by buyer',
+  'Other'
+];
+
+function askDelayReason(taskName, daysLate, callback){
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1001;display:flex;align-items:center;justify-content:center';
+
+  const card = document.createElement('div');
+  card.style.cssText = 'background:#fff;border-radius:14px;padding:24px;width:420px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.18)';
+
+  const header = document.createElement('div');
+  header.innerHTML = '<div style="font-size:15px;font-weight:700;margin-bottom:4px">⚠️ Task Completed Late</div>' +
+    '<div style="font-size:12px;color:#888;margin-bottom:16px"><strong>'+esc(taskName)+'</strong> — '+daysLate+' days behind schedule</div>' +
+    '<div style="font-size:12px;font-weight:600;color:#555;margin-bottom:8px">Why was this delayed?</div>';
+
+  const reasonsDiv = document.createElement('div');
+  reasonsDiv.style.cssText = 'display:flex;flex-direction:column;gap:6px;margin-bottom:14px';
+
+  let selectedReason = '';
+  DELAY_REASONS.forEach(r => {
+    const btn = document.createElement('button');
+    btn.textContent = r;
+    btn.style.cssText = 'padding:8px 12px;border-radius:8px;border:1.5px solid #e4e4e0;background:#fff;cursor:pointer;font-family:inherit;font-size:12px;text-align:left;transition:all .15s';
+    btn.onclick = () => {
+      reasonsDiv.querySelectorAll('button').forEach(b => {
+        b.style.background = '#fff'; b.style.borderColor = '#e4e4e0'; b.style.color = '#1a1a18';
+      });
+      btn.style.background = '#f0f9f5'; btn.style.borderColor = '#52B788'; btn.style.color = '#166534';
+      selectedReason = r;
+    };
+    reasonsDiv.appendChild(btn);
+  });
+
+  const noteLabel = document.createElement('div');
+  noteLabel.textContent = 'Additional notes (optional)';
+  noteLabel.style.cssText = 'font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px';
+
+  const noteInput = document.createElement('textarea');
+  noteInput.style.cssText = 'width:100%;padding:8px 10px;border:1.5px solid #e4e4e0;border-radius:8px;font-family:inherit;font-size:12px;outline:none;resize:none;height:56px;margin-bottom:14px';
+  noteInput.placeholder = 'E.g. Mill delayed due to yarn shortage...';
+
+  const btnRow = document.createElement('div');
+  btnRow.style.cssText = 'display:flex;gap:8px';
+
+  const skipBtn = document.createElement('button');
+  skipBtn.textContent = 'Skip';
+  skipBtn.style.cssText = 'flex:1;padding:9px;border-radius:8px;border:1.5px solid #e4e4e0;background:#fff;cursor:pointer;font-family:inherit;font-size:13px';
+  skipBtn.onclick = () => { modal.remove(); callback(''); };
+
+  const saveBtn = document.createElement('button');
+  saveBtn.textContent = 'Save Reason';
+  saveBtn.style.cssText = 'flex:2;padding:9px;border-radius:8px;border:none;background:#1C1917;color:#fff;cursor:pointer;font-family:inherit;font-size:13px;font-weight:600';
+  saveBtn.onclick = () => {
+    const note = noteInput.value.trim();
+    const final = selectedReason + (note ? ' — ' + note : '');
+    modal.remove();
+    callback(final || note || '');
+  };
+
+  btnRow.appendChild(skipBtn);
+  btnRow.appendChild(saveBtn);
+
+  card.appendChild(header);
+  card.appendChild(reasonsDiv);
+  card.appendChild(noteLabel);
+  card.appendChild(noteInput);
+  card.appendChild(btnRow);
+  modal.appendChild(card);
+  document.body.appendChild(modal);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PDF EXPORT
+// ═══════════════════════════════════════════════════════════════
+function exportOrderPDF(idx){
+  const o = orders[idx];
+  if(!o){ addMsg('assistant','No order selected.'); return; }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' });
+  const W = 210, pad = 15;
+  let y = pad;
+
+  // Header bar
+  doc.setFillColor(28,25,23);
+  doc.rect(0,0,W,20,'F');
+  doc.setTextColor(255,255,255);
+  doc.setFontSize(10); doc.setFont('helvetica','normal');
+  doc.text('ASHA CREATIONS', pad, 8);
+  doc.text('AI Merchandiser', pad, 14);
+  doc.setFontSize(8);
+  doc.text('Generated: '+new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}), W-pad, 14, {align:'right'});
+  y = 28;
+
+  // Order title
+  doc.setTextColor(28,25,23);
+  doc.setFontSize(16); doc.setFont('helvetica','bold');
+  doc.text(o.style.trim()+' — '+o.color.trim(), pad, y); y += 7;
+  doc.setFontSize(9); doc.setFont('helvetica','normal'); doc.setTextColor(100,100,100);
+  doc.text('Flow #'+o.flowId+' · '+o.buyer+' · '+o.product+' · '+o.season, pad, y); y += 5;
+  doc.setDrawColor(201,168,76); doc.setLineWidth(.5); doc.line(pad, y, W-pad, y); y += 6;
+
+  // Meta grid
+  const meta = [
+    ['PO', o.po||'—'], ['Order Qty', (o.qty||0).toLocaleString()+' pcs'],
+    ['Order Date', (o.orderDate||'—').slice(0,10)], ['Ex-Factory', (o.exFactory||'—').slice(0,10)],
+    ['Merchant', o.merchant||'—'], ['Season', o.season||'—']
+  ];
+  doc.setFontSize(8); doc.setTextColor(28,25,23);
+  meta.forEach(([k,v], i) => {
+    const col = i%2===0 ? pad : W/2+5;
+    if(i%2===0 && i>0) y += 6;
+    doc.setFont('helvetica','bold'); doc.text(k+':', col, y);
+    doc.setFont('helvetica','normal'); doc.text(String(v), col+22, y);
+  });
+  y += 10;
+
+  // Progress summary
+  const taskCols26 = TASK_COLS.filter(t=>t!=='Order Completed'&&t!=='Ex-Factory');
+  const done = taskCols26.filter(t=>o.tasks&&o.tasks[t]&&!o.tasks[t].includes('(planned)')).length;
+  const pct = Math.round(done/taskCols26.length*100);
+  doc.setFillColor(240,247,244); doc.roundedRect(pad, y, W-pad*2, 12, 2, 2, 'F');
+  doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(22,101,52);
+  doc.text('Progress: '+done+'/'+taskCols26.length+' tasks completed ('+pct+'%)', pad+4, y+7);
+  y += 18;
+
+  // Task sections
+  const GROUPS = {
+    'Material & Trims':['Fabric Order','Trims Order','Trims Approval','Trims Payment','Labdips','Bulk Fabric In-house','Trims In-House'],
+    'Sampling':['Fit Sample Indent','Fit Sample Dispatch','Fit Sample Approval','PP Sample Indent','PP Sample Dispatch','PP Sample Recieve','FPT Approval','GPT Indent To Testing Agency','GPT Approval','PP Sample Approval'],
+    'Production':['Cutting','Sewing','Inline Inspection','Finishing','Packing','Final Inspection'],
+    'Shipment':['Shipment Sample Dispatch','Shipment Sample Approval']
+  };
+  const GRP_COLORS = {
+    'Material & Trims':[74,144,217],'Sampling':[244,132,95],
+    'Production':[82,183,136],'Shipment':[201,168,76]
+  };
+
+  for(const [grp, tasks] of Object.entries(GROUPS)){
+    if(y > 250){ doc.addPage(); y = 20; }
+    const [r,g,b] = GRP_COLORS[grp]||[100,100,100];
+    const rows = tasks.map(t => {
+      const val = o.tasks && o.tasks[t];
+      const done2 = val && !val.includes('(planned)');
+      const delayed = o.delayReasons && o.delayReasons[t];
+      return [
+        t,
+        done2 ? '✓ Done' : val ? 'Planned' : 'Pending',
+        done2 ? val.slice(0,10) : (val ? val.replace(' (planned)','') : '—'),
+        delayed ? delayed.reason.slice(0,40) : ''
+      ];
+    });
+    doc.autoTable({
+      startY: y,
+      head: [[grp, 'Status', 'Date', 'Delay Reason']],
+      body: rows,
+      margin: {left:pad, right:pad},
+      headStyles:{fillColor:[r,g,b], textColor:255, fontStyle:'bold', fontSize:8},
+      bodyStyles:{fontSize:7.5, textColor:[28,25,23]},
+      columnStyles:{0:{cellWidth:65},1:{cellWidth:20},2:{cellWidth:22},3:{cellWidth:60}},
+      alternateRowStyles:{fillColor:[250,250,248]},
+      didDrawCell: (data) => {
+        if(data.section==='body' && data.column.index===1){
+          const val = data.cell.raw;
+          if(val==='✓ Done') doc.setTextColor(22,101,52);
+          else if(val==='Pending') doc.setTextColor(150,150,150);
+        }
+      }
+    });
+    y = doc.lastAutoTable.finalY + 6;
+  }
+
+  // Remarks
+  if(o.remarks){
+    if(y > 260){ doc.addPage(); y = 20; }
+    doc.setFontSize(8); doc.setFont('helvetica','bold'); doc.setTextColor(28,25,23);
+    doc.text('Remarks:', pad, y); y+=5;
+    doc.setFont('helvetica','normal'); doc.setTextColor(80,80,80);
+    const lines = doc.splitTextToSize(o.remarks, W-pad*2);
+    doc.text(lines, pad, y); y += lines.length*4+4;
+  }
+
+  // Footer
+  doc.setFontSize(7); doc.setTextColor(180,180,180);
+  doc.text('Asha Creations · AI Merchandiser · Confidential', W/2, 292, {align:'center'});
+
+  doc.save('Order_'+o.flowId+'_'+o.style.trim()+'_'+o.color.trim()+'.pdf');
+  addMsg('assistant','📄 PDF downloaded: Order #'+o.flowId+' — '+o.style.trim()+' '+o.color.trim());
+}
+
+function exportAllPDF(){
+  const { jsPDF } = window.jspdf;
+  if(!window.jspdf){ addMsg('assistant','PDF library loading, try again in a moment.'); return; }
+  const doc = new jsPDF({ orientation:'landscape', unit:'mm', format:'a4' });
+  const W = 297, pad = 12;
+  let y = pad;
+
+  // Header
+  doc.setFillColor(28,25,23);
+  doc.rect(0,0,W,18,'F');
+  doc.setTextColor(255,255,255);
+  doc.setFontSize(11); doc.setFont('helvetica','bold');
+  doc.text('ASHA CREATIONS — Order Status Report', pad, 8);
+  doc.setFontSize(8); doc.setFont('helvetica','normal');
+  doc.text(new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'long',year:'numeric'}), W-pad, 12, {align:'right'});
+  y = 26;
+
+  // Group by buyer
+  const buyers = {};
+  orders.filter(o=>!(o.tasks&&o.tasks['Order Completed'])).forEach(o => {
+    const b = (o.buyer||'Other').trim();
+    if(!buyers[b]) buyers[b]=[];
+    buyers[b].push(o);
+  });
+
+  const taskCols26 = TASK_COLS.filter(t=>t!=='Order Completed'&&t!=='Ex-Factory');
+
+  for(const [buyer, bOrders] of Object.entries(buyers)){
+    if(y > 170){ doc.addPage(); y = 20; }
+    const rows = bOrders.sort((a,b2)=>{
+      const ad=a.exFactory?new Date(a.exFactory):new Date('2099-01-01');
+      const bd=b2.exFactory?new Date(b2.exFactory):new Date('2099-01-01');
+      return ad-bd;
+    }).map(o => {
+      const done = taskCols26.filter(t=>o.tasks&&o.tasks[t]&&!o.tasks[t].includes('(planned)')).length;
+      const pct = Math.round(done/taskCols26.length*100)+'%';
+      const next = taskCols26.find(t=>!o.tasks[t]||o.tasks[t].includes('(planned)')) || 'Complete ✓';
+      const delays = getDelays(o);
+      return ['#'+o.flowId, o.style.trim(), o.color.trim(), o.product||'—', (o.qty||0).toLocaleString(), (o.exFactory||'—').slice(0,10), pct, next.slice(0,30), delays.length>0?delays.length+' delayed':'✓'];
+    });
+
+    doc.autoTable({
+      startY: y,
+      head: [[{content:buyer, colSpan:9, styles:{fillColor:[28,25,23], textColor:255, fontStyle:'bold', fontSize:9}}],
+             ['Flow ID','Style','Color','Product','Qty','Ex-Factory','Progress','Next Task','Delays']],
+      body: rows,
+      margin: {left:pad, right:pad},
+      headStyles:{fontSize:8, textColor:[28,25,23]},
+      bodyStyles:{fontSize:7.5},
+      columnStyles:{0:{cellWidth:16},1:{cellWidth:28},2:{cellWidth:22},3:{cellWidth:24},4:{cellWidth:14},5:{cellWidth:20},6:{cellWidth:16},7:{cellWidth:55},8:{cellWidth:18}},
+      alternateRowStyles:{fillColor:[250,250,248]},
+    });
+    y = doc.lastAutoTable.finalY + 8;
+  }
+
+  // Footer
+  doc.setFontSize(7); doc.setTextColor(180,180,180);
+  const pages = doc.internal.getNumberOfPages();
+  for(let i=1;i<=pages;i++){
+    doc.setPage(i);
+    doc.text('Asha Creations · Confidential · Page '+i+'/'+pages, W/2, 202, {align:'center'});
+  }
+
+  doc.save('Asha_Creations_Order_Report_'+new Date().toISOString().slice(0,10)+'.pdf');
+  addMsg('assistant','📄 Full PDF report downloaded — '+orders.length+' orders across '+Object.keys(buyers).length+' buyers.');
 }
 
 // ═══════════════════════════════════════

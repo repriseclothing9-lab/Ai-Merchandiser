@@ -869,6 +869,18 @@ function selectOrder(idx) {
   if(activeTab === 'orders') renderOrder();
 }
 
+function renderOrderKeepScroll(){
+  // Save scroll position before re-render
+  const scroll = document.querySelector('.tasks-scroll');
+  const scrollTop = scroll ? scroll.scrollTop : 0;
+  renderOrder();
+  // Restore scroll position after render
+  requestAnimationFrame(() => {
+    const s = document.querySelector('.tasks-scroll');
+    if(s) s.scrollTop = scrollTop;
+  });
+}
+
 function renderOrder() {
   const panel = document.getElementById('mainPanel');
   if(selectedIdx===null || !orders[selectedIdx]) {
@@ -995,7 +1007,7 @@ function toggleTask(idx, taskName) {
             if(!o.delayReasons) o.delayReasons = {};
             o.delayReasons[taskName] = {reason, daysLate, date: completionTime.slice(0,10)};
           }
-          save(); renderOrder(); renderList();
+          save(); renderOrderKeepScroll(); renderList();
           if(syncEnabled && gsUrl) pushTask(o.flowId, taskName, o.tasks[taskName]||'');
         });
         return; // Wait for modal response
@@ -1004,7 +1016,7 @@ function toggleTask(idx, taskName) {
     o.tasks[taskName] = completionTime;
   }
   save();
-  renderOrder();
+  renderOrderKeepScroll();
   renderList();
   if(syncEnabled && gsUrl) pushTask(o.flowId, taskName, o.tasks[taskName]||'');
   // If order just completed

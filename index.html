@@ -1061,7 +1061,9 @@ function renderSamples() {
               '<div class="s-meta">'+esc(s.type)+' · '+esc(s.style)+(s.buyer?' · '+esc(s.buyer):'')+(s.qty?' · <strong>'+s.qty+' pcs</strong>':'')+'</div>'+
             '</div>'+
             '<div style="display:flex;align-items:center;gap:6px">'+
+              (s.photo ? '<img src="'+s.photo+'" style="width:36px;height:36px;object-fit:cover;border-radius:6px;border:1px solid var(--border);cursor:pointer;flex-shrink:0" onclick="showPhotoFull(\''+s.id+'\')" title="View photo">' : '')+
               '<div class="s-sent '+(s.sent?'yes':'')+'" onclick="toggleSent(\''+s.id+'\')">'+( s.sent?'✓ Sent':'Not sent')+'</div>'+
+              '<button onclick="editSample(\''+s.id+'\')" style="font-size:11px;padding:3px 8px;border-radius:6px;border:1px solid var(--border);background:transparent;cursor:pointer;color:var(--text2);font-family:inherit">✏️ Edit</button>'+
               '<button class="s-del" onclick="delSample(\''+s.id+'\')">✕</button>'+
             '</div>'+
           '</div>'+
@@ -1081,8 +1083,13 @@ function renderSamples() {
                   'Send to Buyer'+
                 '</button>'+
                 '<button onclick="editAWB(\''+s.id+'\')" style="font-size:10px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:transparent;cursor:pointer;color:var(--text3)">Edit</button>'
-              : '<input class="awb-input" placeholder="Enter AWB / tracking number..." onblur="saveAWB(\''+s.id+'\',this.value)" onkeydown="if(event.key===\'Enter\')this.blur()">'+
-                '<span style="font-size:10px;color:var(--text3);white-space:nowrap">Shree Maruti</span>'
+              : '<div style="display:flex;flex-direction:column;gap:6px;flex:1">'+
+                  '<div style="display:flex;align-items:center;gap:8px">'+
+                    '<input class="awb-input" id="awb_'+s.id+'" placeholder="Enter AWB / tracking number..." onblur="saveAWB(\''+s.id+'\',this.value)" onkeydown="if(event.key===\'Enter\')this.blur()">'+
+                    '<span style="font-size:10px;color:var(--text3);white-space:nowrap">Shree Maruti</span>'+
+                  '</div>'+
+                  (s.sent ? '<button class="awb-wa-btn" style="width:fit-content;margin-top:0" onclick="sendSampleWA(\''+s.id+'\')" >📱 Send to Buyer</button>' : '') +
+                '</div>'
             )+
           '</div>'+
         '</div>';
@@ -3189,6 +3196,147 @@ function exportAllPDF(){
   addMsg('assistant','📄 Branded PDF report ready — '+activeOrders.length+' orders, '+bList.length+' buyers, '+overallPct+'% overall completion.');
 }
 
+
+
+
+
+function showPhotoFull(id){
+  const s = samples.find(x=>x.id===id);
+  if(!s || !s.photo) return;
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:2000;display:flex;align-items:center;justify-content:center;cursor:pointer';
+  modal.onclick = () => modal.remove();
+  const img = document.createElement('img');
+  img.src = s.photo;
+  img.style.cssText = 'max-width:90vw;max-height:90vh;object-fit:contain;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.5)';
+  const label = document.createElement('div');
+  label.style.cssText = 'position:absolute;bottom:20px;color:#fff;font-size:13px;text-align:center;background:rgba(0,0,0,.5);padding:6px 16px;border-radius:20px';
+  label.textContent = s.name + (s.type ? ' · '+s.type : '');
+  modal.appendChild(img);
+  modal.appendChild(label);
+  document.body.appendChild(modal);
+}
+
+// ── Sample Photo ──────────────────────────────────────────────
+function previewSamplePhoto(input){
+  const file = input.files[0];
+  if(!file) return;
+  // Resize to max 400px for storage efficiency
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const maxSize = 400;
+      let w = img.width, h = img.height;
+      if(w > h){ if(w>maxSize){h=h*(maxSize/w);w=maxSize;} }
+      else { if(h>maxSize){w=w*(maxSize/h);h=maxSize;} }
+      canvas.width=w; canvas.height=h;
+      canvas.getContext('2d').drawImage(img,0,0,w,h);
+      const dataUrl = canvas.toDataURL('image/jpeg',0.7);
+      input._newPhoto = dataUrl;
+      // Update preview
+      const wrap = document.getElementById('esPhotoWrap');
+      if(wrap){
+        const existing = wrap.querySelector('img');
+        if(existing) existing.src = dataUrl;
+        else {
+          const preview = document.createElement('img');
+          preview.style.cssText = 'width:60px;height:60px;object-fit:cover;border-radius:8px;border:1.5px solid var(--border)';
+          preview.src = dataUrl;
+          wrap.insertBefore(preview, wrap.firstChild);
+          const placeholder = wrap.querySelector('div[style*="dashed"]');
+          if(placeholder) placeholder.remove();
+        }
+      }
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+// ── Sample Edit Modal ─────────────────────────────────────────
+function editSample(id){
+  const s = samples.find(x=>x.id===id);
+  if(!s) return;
+
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center';
+
+  const card = document.createElement('div');
+  card.style.cssText = 'background:#fff;border-radius:14px;padding:24px;width:520px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.18)';
+
+  card.innerHTML =
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">'+
+      '<h2 style="font-size:15px;font-weight:700">Edit Sample</h2>'+
+      '<button id="esClose" style="background:none;border:none;font-size:18px;cursor:pointer;color:#888">✕</button>'+
+    '</div>'+
+    // Photo upload area
+    '<div style="margin-bottom:14px">'+
+      '<label class="s-label">Sample Photo</label>'+
+      '<div id="esPhotoWrap" style="display:flex;align-items:center;gap:10px;margin-top:4px">'+
+        (s.photo
+          ? '<img src="'+s.photo+'" style="width:60px;height:60px;object-fit:cover;border-radius:8px;border:1.5px solid var(--border)">'
+          : '<div style="width:60px;height:60px;border-radius:8px;border:2px dashed var(--border);display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:20px">📷</div>')+
+        '<div>'+
+          '<input type="file" id="es-photo" accept="image/*" style="display:none" onchange="previewSamplePhoto(this)">'+
+          '<button onclick="document.getElementById(\'es-photo\').click()" style="font-size:12px;padding:6px 12px;border-radius:6px;border:1.5px solid var(--border);background:var(--surface2);cursor:pointer;font-family:inherit">📷 Upload Photo</button>'+
+          '<div style="font-size:10px;color:var(--text3);margin-top:4px">Photo of sample for reference</div>'+
+        '</div>'+
+      '</div>'+
+    '</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'+
+      '<div><label class="s-label">Name</label><input id="es-name" class="s-input" value="'+esc(s.name)+'"></div>'+
+      '<div><label class="s-label">Style</label><input id="es-style" class="s-input" value="'+esc(s.style||'')+'"></div>'+
+      '<div><label class="s-label">Type</label>'+
+        '<select id="es-type" class="s-input">'+
+          ['Development Sample','Fit Sample','PP Sample','Shipment Sample','Counter Sample','Photo Sample','Salesman Sample']
+            .map(t=>'<option '+(s.type===t?'selected':'')+'>'+t+'</option>').join('')+
+        '</select></div>'+
+      '<div><label class="s-label">Buyer</label><input id="es-buyer" class="s-input" value="'+esc(s.buyer||'')+'"></div>'+
+      '<div><label class="s-label">Qty (pcs)</label><input id="es-qty" class="s-input" type="number" value="'+(s.qty||0)+'"></div>'+
+      '<div><label class="s-label">AWB / Tracking</label><input id="es-awb" class="s-input" value="'+esc(s.awb||'')+'"></div>'+
+      '<div><label class="s-label">Dispatch Date</label><input id="es-date" class="s-input" type="date" value="'+(s.date||'').slice(0,10)+'"></div>'+
+      '<div><label class="s-label">Status</label>'+
+        '<select id="es-status" class="s-input">'+
+          ['Pending Dispatch','Dispatched','Received by Buyer','Approved','Revision Required','Rejected']
+            .map(st=>'<option '+(s.status===st?'selected':'')+'>'+st+'</option>').join('')+
+        '</select></div>'+
+    '</div>'+
+    '<div><label class="s-label">Notes</label><input id="es-notes" class="s-input" style="width:100%" value="'+esc(s.notes||'')+'"></div>'+
+    '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">'+
+      '<button id="esCancel" class="s-btn">Cancel</button>'+
+      '<button id="esSave" class="s-btn s-btn-p">Save Changes</button>'+
+    '</div>';
+
+  modal.appendChild(card);
+  document.body.appendChild(modal);
+
+  document.getElementById('esClose').onclick = () => modal.remove();
+  document.getElementById('esCancel').onclick = () => modal.remove();
+  modal.addEventListener('click', e => { if(e.target===modal) modal.remove(); });
+
+  document.getElementById('esSave').onclick = () => {
+    s.name   = document.getElementById('es-name').value.trim();
+    s.style  = document.getElementById('es-style').value.trim();
+    s.type   = document.getElementById('es-type').value;
+    s.buyer  = document.getElementById('es-buyer').value.trim();
+    s.qty    = parseInt(document.getElementById('es-qty').value)||0;
+    s.awb    = document.getElementById('es-awb').value.trim();
+    s.date   = document.getElementById('es-date').value;
+    s.status = document.getElementById('es-status').value;
+    s.notes  = document.getElementById('es-notes').value.trim();
+    s.sent   = !['Pending Dispatch'].includes(s.status);
+    // Save photo if new one was selected
+    const photoInput = document.getElementById('es-photo');
+    if(photoInput && photoInput._newPhoto) s.photo = photoInput._newPhoto;
+    saveSamples();
+    if(activeTab==='samples') renderSamples();
+    if(syncEnabled) gsPost({action:'updateSample', sample:s}).catch(()=>{});
+    modal.remove();
+    addMsg('assistant','✅ Sample updated: '+s.name+(s.awb?' · AWB: '+s.awb:'')+(s.photo?' · 📷 Photo saved':''));
+  };
+}
 
 // ═══════════════════════════════════════
 // EXPORT & UTILS

@@ -753,7 +753,22 @@ function init() {
         TASK_COLS.forEach(t => orders.forEach(o => {
           if(o.tasks[t] === undefined) o.tasks[t] = null;
         }));
-        if(data.samples && data.samples.length > 0) samples = data.samples;
+        // On init: merge sheet samples with local (preserve AWB/photo)
+        if(data.samples && data.samples.length > 0){
+          const localById = {};
+          samples.forEach(s => localById[s.id] = s);
+          data.samples.forEach(ss => {
+            if(localById[ss.id]){
+              const local = localById[ss.id];
+              ss.awb   = ss.awb   || local.awb   || '';
+              ss.photo = ss.photo || local.photo || '';
+              Object.assign(local, ss);
+            } else {
+              samples.push(ss);
+            }
+          });
+          samples = samples; // trigger reassignment
+        }
         save(); saveSamples();
         addMsg('assistant', '✅ Loaded ' + orders.length + ' orders from Google Sheets.');
       } else {
@@ -1564,7 +1579,25 @@ function startPoll(){
           }
         }
       });
-      if(data.samples)samples=data.samples;
+      // Merge samples — never overwrite local fields that sheet doesn't have (like AWB, photo)
+      if(data.samples && data.samples.length > 0){
+        const localSamplesById = {};
+        samples.forEach(s => localSamplesById[s.id] = s);
+        data.samples.forEach(ss => {
+          if(localSamplesById[ss.id]){
+            const local = localSamplesById[ss.id];
+            // Keep local fields that sheet may not have
+            ss.awb   = ss.awb   || local.awb   || '';
+            ss.photo = ss.photo || local.photo || '';
+            ss.notes = ss.notes || local.notes || '';
+            // Sheet wins on status/sent (team updates)
+            Object.assign(local, ss);
+          } else {
+            // New sample from sheet
+            samples.push(ss);
+          }
+        });
+      }
       save();saveSamples();renderList();
       if(added>0){renderOrder();addMsg('assistant','🔄 '+added+' new order'+(added>1?'s':'')+' from Google Sheets!');}
     }catch(e){}
@@ -1637,7 +1670,22 @@ async function manualSync(){
       orders=data.orders.map(o=>({...o,tasks:o.tasks||{}}));
       TASK_COLS.forEach(t=>orders.forEach(o=>{if(o.tasks[t]===undefined)o.tasks[t]=null;}));
     }
-    if(data.samples)samples=data.samples;
+    // Merge samples preserving local AWB/photo
+    if(data.samples && data.samples.length > 0){
+      const localById = {};
+      samples.forEach(s => localById[s.id] = s);
+      data.samples.forEach(ss => {
+        if(localById[ss.id]){
+          const local = localById[ss.id];
+          ss.awb   = ss.awb   || local.awb   || '';
+          ss.photo = ss.photo || local.photo || '';
+          ss.notes = ss.notes || local.notes || '';
+          Object.assign(local, ss);
+        } else {
+          samples.push(ss);
+        }
+      });
+    }
     save();saveSamples();renderList();renderOrder();updateStat();
     setSyncUI('Connected — '+gsUser, true, false);
     addMsg('assistant','✅ Synced! '+orders.length+' orders from Google Sheets.');

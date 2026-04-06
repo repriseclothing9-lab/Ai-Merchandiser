@@ -1069,7 +1069,7 @@ function renderSamples() {
     ? '<div style="text-align:center;padding:48px;color:#aaa">'+(samples.length===0?'No samples yet. Click "+ Add Sample" or tell the AI.':'No samples match this filter.')+'</div>'
     : filtered.map(s => {
         const st = STATUS_STYLE[s.status]||'';
-        return '<div class="s-card" style="cursor:pointer" onclick="showSampleDetail(\'' + s.id + '\')">'+
+        return '<div class="s-card" data-sample-id="'+s.id+'" style="cursor:pointer">'+
           '<div class="s-card-top">'+
             '<div>'+
               '<div class="s-name">'+esc(s.name)+'</div>'+
@@ -1177,6 +1177,16 @@ function addSample() {
   showSampleForm(false);
   addMsg('assistant','✓ Added sample: '+s.name+' ('+s.type+') — '+s.status);
   if(syncEnabled) gsPost({action:'addSample',sample:s}).catch(()=>{});
+  // Delegated click — works without any escaping
+  const panel2 = document.getElementById('mainPanel');
+  if(panel2){
+    panel2.addEventListener('click', function sampleClickHandler(e){
+      const card = e.target.closest('[data-sample-id]');
+      if(card && !e.target.closest('button') && !e.target.closest('select') && !e.target.closest('.s-sent') && !e.target.closest('input')){
+        showSampleDetail(card.getAttribute('data-sample-id'));
+      }
+    }, {once: true});
+  }
 }
 
 function toggleSent(id) {

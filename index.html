@@ -964,11 +964,32 @@ function renderOrder() {
         continue;
       }
       const cls = val ? 'done '+gc : 'pending';
-      html += '<div class="task-card '+cls+'" onclick="toggleTask('+selectedIdx+',\''+t+'\')">'+
-        '<div class="task-name">'+t+'</div>'+
-        '<div class="task-date">'+(val?val.slice(0,16):'Pending')+'</div>'+
-        '<div class="task-check">'+(val?'✓':'')+'</div>'+
+      const isAWBTask = t === 'PP Sample Dispatch' || t === 'Shipment Sample Dispatch';
+      const taskAWB = o.taskAWB && o.taskAWB[t] ? o.taskAWB[t] : '';
+      if(isAWBTask){
+        html += '<div class="task-card '+cls+'" style="position:relative">'+
+          '<div onclick="toggleTask('+selectedIdx+',\''+t+'\')" style="cursor:pointer">'+
+            '<div class="task-name">'+t+'</div>'+
+            '<div class="task-date">'+(val?val.slice(0,16):'Pending')+'</div>'+
+            '<div class="task-check" style="position:absolute;top:10px;right:10px">'+(val?'✓':'')+'</div>'+
+          '</div>'+
+          '<div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(0,0,0,.06)">'+
+            (taskAWB
+              ? '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">'+
+                  '<span style="font-size:10px;padding:2px 8px;border-radius:20px;background:var(--gold-light);color:var(--gold-dark);font-weight:700;border:1px solid #DFC98A">📦 '+esc(taskAWB)+'</span>'+
+                  '<button onclick="editTaskAWB('+selectedIdx+',\''+t+'\')" style="font-size:10px;padding:2px 7px;border-radius:5px;border:1px solid var(--border);background:transparent;cursor:pointer;color:var(--text3);font-family:inherit">Edit AWB</button>'+
+                  '<button onclick="taskAWBWhatsApp('+selectedIdx+',\''+t+'\')" style="font-size:10px;padding:2px 7px;border-radius:5px;border:none;background:#25D366;color:#fff;cursor:pointer;font-family:inherit">📱 WA</button>'+
+                '</div>'
+              : '<button onclick="editTaskAWB('+selectedIdx+',\''+t+'\')" style="font-size:10px;padding:4px 10px;border-radius:6px;border:1.5px dashed var(--border2);background:transparent;cursor:pointer;color:var(--text2);width:100%;font-family:inherit">📦 Add AWB / Tracking No.</button>')+
+          '</div>'+
         '</div>';
+      } else {
+        html += '<div class="task-card '+cls+'" onclick="toggleTask('+selectedIdx+',\''+t+'\')">'+
+          '<div class="task-name">'+t+'</div>'+
+          '<div class="task-date">'+(val?val.slice(0,16):'Pending')+'</div>'+
+          '<div class="task-check">'+(val?'✓':'')+'</div>'+
+          '</div>';
+      }
     }
     html += '</div></div>';
   }
@@ -1580,6 +1601,8 @@ function startPoll(){
           // Merge: keep BOTH local AND sheet completions (never lose data)
           const local=localById[so.flowId];
           if(!local.tasks) local.tasks={};
+          // Preserve local taskAWB (not stored in sheet columns yet)
+          if(so.taskAWB && !local.taskAWB) local.taskAWB = so.taskAWB;
           if(so.tasks){
             TASK_COLS.forEach(t=>{
               // If either local or sheet has a value, keep it
@@ -3273,6 +3296,125 @@ function showPhotoFull(id){
   modal.appendChild(img);
   modal.appendChild(label);
   document.body.appendChild(modal);
+}
+
+
+// ── Task AWB (PP Sample / Shipment Sample) ──────────────────
+
+function taskAWBWhatsApp(orderIdx, taskName){
+  // Quick WA without opening AWB modal - uses existing AWB
+  const o = orders[orderIdx];
+  if(!o || !o.taskAWB || !o.taskAWB[taskName]) {
+    editTaskAWB(orderIdx, taskName); // Open modal to add AWB first
+    return;
+  }
+  const awb = o.taskAWB[taskName];
+  const today = new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'long',year:'numeric'});
+  const label = taskName === 'PP Sample Dispatch' ? 'PP Sample' : 'Shipment Sample';
+  const msg =
+    'Dear Team,\n\n'+
+    'Please note that your *'+label+'* has been dispatched via *Shree Maruti Courier*.\n\n'+
+    '*Details:*\n'+
+    '• Style: *'+o.style.trim()+' — '+o.color.trim()+'*\n'+
+    '• Flow ID: #'+o.flowId+'\n'+
+    '• Buyer: *'+o.buyer+'*\n'+
+    '• Dispatch Date: *'+today+'*\n'+
+    '• Courier: *Shree Maruti Courier*\n'+
+    '• AWB No.: *'+awb+'*\n'+
+    '\nPlease confirm receipt.\n\nRegards,\nAsha Creations';
+  showWAModal(msg);
+}
+
+function editTaskAWB(orderIdx, taskName){
+  const o = orders[orderIdx];
+  if(!o) return;
+  if(!o.taskAWB) o.taskAWB = {};
+  const current = o.taskAWB[taskName] || '';
+
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center';
+
+  const card = document.createElement('div');
+  card.style.cssText = 'background:#fff;border-radius:14px;padding:24px;width:420px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.18)';
+
+  card.innerHTML =
+    '<div style="font-size:15px;font-weight:700;margin-bottom:4px">📦 AWB / Tracking — '+esc(taskName)+'</div>'+
+    '<div style="font-size:12px;color:#888;margin-bottom:14px">'+esc(o.style.trim())+' '+esc(o.color.trim())+' · '+esc(o.buyer)+'</div>'+
+    '<label style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:5px">AWB / Tracking Number</label>'+
+    '<input id="tawbInput" class="s-input" style="width:100%;margin-bottom:8px" placeholder="e.g. SM123456789" value="'+esc(current)+'">'+
+    '<div style="font-size:11px;color:#888;margin-bottom:16px">Shree Maruti Courier</div>'+
+    '<div style="display:flex;gap:8px;justify-content:flex-end">'+
+      '<button id="tawbCancel" class="s-btn">Cancel</button>'+
+      '<button id="tawbWA" style="padding:8px 14px;border-radius:8px;border:none;background:#25D366;color:#fff;cursor:pointer;font-family:inherit;font-size:12px;font-weight:600">📱 WhatsApp</button>'+
+      '<button id="tawbSave" class="s-btn s-btn-p">Save</button>'+
+    '</div>';
+
+  modal.appendChild(card);
+  document.body.appendChild(modal);
+
+  document.getElementById('tawbInput').focus();
+  document.getElementById('tawbCancel').onclick = () => modal.remove();
+  modal.addEventListener('click', e => { if(e.target===modal) modal.remove(); });
+
+  document.getElementById('tawbSave').onclick = () => {
+    const awb = document.getElementById('tawbInput').value.trim();
+    if(!awb){ modal.remove(); return; }
+    o.taskAWB[taskName] = awb;
+    save();
+    if(syncEnabled) gsPost({action:'updateTaskAWB', flowId:o.flowId, task:taskName, awb}).catch(()=>{});
+    modal.remove();
+    renderOrderKeepScroll();
+    addMsg('assistant', '📦 AWB saved for '+taskName+'\n'+o.style.trim()+' '+o.color.trim()+': '+awb);
+  };
+
+  document.getElementById('tawbWA').onclick = () => {
+    const awb = document.getElementById('tawbInput').value.trim();
+    if(awb){
+      o.taskAWB[taskName] = awb;
+      save();
+      if(syncEnabled) gsPost({action:'updateTaskAWB', flowId:o.flowId, task:taskName, awb}).catch(()=>{});
+    }
+    modal.remove();
+    renderOrderKeepScroll();
+    // Generate WhatsApp message
+    const today = new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'long',year:'numeric'});
+    const label = taskName === 'PP Sample Dispatch' ? 'PP Sample' : 'Shipment Sample';
+    const msg =
+      'Dear Team,\n\n'+
+      'Please note that your *'+label+'* has been dispatched via *Shree Maruti Courier*.\n\n'+
+      '*Details:*\n'+
+      '• Style: *'+o.style.trim()+' — '+o.color.trim()+'*\n'+
+      '• Flow ID: #'+o.flowId+'\n'+
+      '• Buyer: *'+o.buyer+'*\n'+
+      '• Dispatch Date: *'+today+'*\n'+
+      '• Courier: *Shree Maruti Courier*\n'+
+      (awb?'• AWB No.: *'+awb+'*\n':'')+
+      '\nPlease confirm receipt.\n\nRegards,\nAsha Creations';
+    const waModal = document.createElement('div');
+    waModal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1001;display:flex;align-items:center;justify-content:center';
+    const waCard = document.createElement('div');
+    waCard.style.cssText = 'background:#fff;border-radius:14px;padding:22px;width:480px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.18)';
+    const pre = document.createElement('div');
+    pre.style.cssText = 'background:#e8f5e9;border-radius:10px;padding:14px;font-size:12px;white-space:pre-wrap;line-height:1.6;margin-bottom:14px;max-height:280px;overflow-y:auto';
+    pre.textContent = msg;
+    const br = document.createElement('div');
+    br.style.cssText = 'display:flex;gap:8px';
+    const cpBtn = document.createElement('button');
+    cpBtn.textContent = '📋 Copy'; cpBtn.style.cssText = 'flex:1;padding:10px;border-radius:8px;border:1px solid #ddd;background:#fff;cursor:pointer;font-family:inherit;font-size:13px';
+    cpBtn.onclick = () => navigator.clipboard.writeText(msg).then(()=>{cpBtn.textContent='✅ Copied!';setTimeout(()=>cpBtn.textContent='📋 Copy',2000);});
+    const waOpen = document.createElement('button');
+    waOpen.textContent = '📱 Open WhatsApp'; waOpen.style.cssText = 'flex:1;padding:10px;border-radius:8px;border:none;background:#25D366;color:#fff;cursor:pointer;font-family:inherit;font-size:13px;font-weight:600';
+    waOpen.onclick = () => window.open('https://wa.me/?text='+encodeURIComponent(msg),'_blank');
+    br.appendChild(cpBtn); br.appendChild(waOpen);
+    waCard.appendChild(pre); waCard.appendChild(br);
+    waModal.appendChild(waCard);
+    document.body.appendChild(waModal);
+    waModal.addEventListener('click', e => { if(e.target===waModal) waModal.remove(); });
+  };
+
+  document.getElementById('tawbInput').addEventListener('keydown', e => {
+    if(e.key === 'Enter') document.getElementById('tawbSave').click();
+  });
 }
 
 // ── Sample Photo ──────────────────────────────────────────────

@@ -1069,7 +1069,7 @@ function renderSamples() {
     ? '<div style="text-align:center;padding:48px;color:#aaa">'+(samples.length===0?'No samples yet. Click "+ Add Sample" or tell the AI.':'No samples match this filter.')+'</div>'
     : filtered.map(s => {
         const st = STATUS_STYLE[s.status]||'';
-        return '<div class="s-card" style="cursor:pointer" onclick="showSampleDetail(\'\'+s.id+\'\')">'+ 
+        return '<div class="s-card" style="cursor:pointer" onclick="showSampleDetail(\'' + s.id + '\')">'+
           '<div class="s-card-top">'+
             '<div>'+
               '<div class="s-name">'+esc(s.name)+'</div>'+
@@ -3391,145 +3391,131 @@ function editSample(id){
 // SAMPLE DETAIL VIEW
 // ═══════════════════════════════════════════════════════════════
 function showSampleDetail(id){
-  const s = samples.find(x=>x.id===id);
-  if(!s) return;
+  const s = samples.find(x => x.id === id);
+  if(!s){ console.log('Sample not found:', id); return; }
 
-  const STATUS_STYLE = {
-    'Pending Dispatch':'background:#fff8e1;color:#b45309',
-    'Dispatched':'background:#e0f2fe;color:#0369a1',
-    'Received by Buyer':'background:#f3e8ff;color:#7e22ce',
-    'Approved':'background:#f0fdf4;color:#166534',
-    'Revision Required':'background:#fff7ed;color:#9a3412',
-    'Rejected':'background:#fef2f2;color:#991b1b'
+  const ST = {
+    'Pending Dispatch':'background:#fff8e1;color:#b45309;border:1px solid #f5c842',
+    'Dispatched':'background:#e0f2fe;color:#0369a1;border:1px solid #7dd3fc',
+    'Received by Buyer':'background:#f3e8ff;color:#7e22ce;border:1px solid #d8b4fe',
+    'Approved':'background:#f0fdf4;color:#166534;border:1px solid #86efac',
+    'Revision Required':'background:#fff7ed;color:#9a3412;border:1px solid #fdba74',
+    'Rejected':'background:#fef2f2;color:#991b1b;border:1px solid #fca5a5'
   };
 
-  const modal = document.createElement('div');
-  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px';
+  // Remove any existing detail modal
+  const existing = document.getElementById('sampleDetailModal');
+  if(existing) existing.remove();
 
-  const card = document.createElement('div');
-  card.style.cssText = 'background:#fff;border-radius:16px;width:560px;max-width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 24px 64px rgba(0,0,0,.2);display:flex;flex-direction:column';
+  const overlay = document.createElement('div');
+  overlay.id = 'sampleDetailModal';
+  overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+  overlay.addEventListener('click', function(e){ if(e.target===overlay) overlay.remove(); });
 
-  // ── Header ──────────────────────────────────────────
-  const hdr = document.createElement('div');
-  hdr.style.cssText = 'background:#1C1917;border-radius:16px 16px 0 0;padding:18px 20px;flex-shrink:0';
-  hdr.innerHTML =
-    '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
+  const box = document.createElement('div');
+  box.style.cssText = 'background:#fff;border-radius:16px;width:520px;max-width:100%;max-height:85vh;overflow-y:auto;box-shadow:0 25px 60px rgba(0,0,0,.25)';
+  box.addEventListener('click', function(e){ e.stopPropagation(); });
+
+  // Header
+  box.innerHTML =
+    '<div style="background:#1C1917;border-radius:16px 16px 0 0;padding:18px 20px;display:flex;justify-content:space-between;align-items:flex-start">'+
       '<div>'+
-        '<div style="font-size:17px;font-weight:700;color:#fff;margin-bottom:3px">'+esc(s.name)+'</div>'+
-        '<div style="font-size:11px;color:rgba(255,255,255,.5)">'+esc(s.type)+' · '+esc(s.buyer||'—')+' · '+esc(s.style||'—')+'</div>'+
+        '<div style="font-size:18px;font-weight:700;color:#fff;margin-bottom:4px">'+esc(s.name)+'</div>'+
+        '<div style="font-size:12px;color:rgba(255,255,255,.45)">'+esc(s.type||'—')+' &nbsp;·&nbsp; '+esc(s.buyer||'—')+' &nbsp;·&nbsp; Style: '+esc(s.style||'—')+'</div>'+
       '</div>'+
-      '<button id="sdClose" style="background:rgba(255,255,255,.1);border:none;color:#fff;border-radius:8px;padding:5px 10px;cursor:pointer;font-size:16px">✕</button>'+
+      '<button onclick="document.getElementById(\'sampleDetailModal\').remove()" style="background:rgba(255,255,255,.12);border:none;color:#fff;border-radius:8px;width:32px;height:32px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center">✕</button>'+
     '</div>';
 
-  // ── Body ─────────────────────────────────────────────
   const body = document.createElement('div');
-  body.style.cssText = 'padding:20px;display:flex;flex-direction:column;gap:16px';
+  body.style.cssText = 'padding:20px;display:flex;flex-direction:column;gap:14px';
 
-  // Status badge
-  const statusBadge = document.createElement('div');
-  statusBadge.style.cssText = 'display:flex;align-items:center;gap:10px';
-  statusBadge.innerHTML =
-    '<span style="font-size:13px;padding:5px 14px;border-radius:20px;font-weight:600;'+( STATUS_STYLE[s.status]||'background:#f0f0ec;color:#555')+'">'+esc(s.status)+'</span>'+
-    (s.sent?'<span style="font-size:12px;padding:4px 12px;border-radius:20px;background:#f0fdf4;color:#166534;border:1px solid #a8dcc5;font-weight:600">✓ Sent to Buyer</span>':
-            '<span style="font-size:12px;padding:4px 12px;border-radius:20px;background:#fff8e1;color:#b45309;border:1px dashed #deb96a;font-weight:600">Not Dispatched</span>');
+  // Status row
+  const statusRow = document.createElement('div');
+  statusRow.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;align-items:center';
+  statusRow.innerHTML =
+    '<span style="font-size:12px;font-weight:700;padding:5px 14px;border-radius:20px;'+(ST[s.status]||'background:#f0f0ec;color:#555')+'">'+esc(s.status)+'</span>'+
+    (s.sent
+      ? '<span style="font-size:12px;padding:5px 14px;border-radius:20px;background:#f0fdf4;color:#166534;border:1px solid #86efac;font-weight:600">✓ Dispatched to Buyer</span>'
+      : '<span style="font-size:12px;padding:5px 14px;border-radius:20px;background:#fff8e1;color:#b45309;border:1px dashed #deb96a">⏳ Not Dispatched</span>');
+  body.appendChild(statusRow);
 
-  // Photo + meta grid
+  // Photo + details
   const topRow = document.createElement('div');
-  topRow.style.cssText = 'display:flex;gap:16px;align-items:flex-start';
-
+  topRow.style.cssText = 'display:flex;gap:14px;align-items:flex-start';
   if(s.photo){
-    const photoDiv = document.createElement('div');
-    photoDiv.style.cssText = 'flex-shrink:0';
+    const imgWrap = document.createElement('div');
+    imgWrap.style.cssText = 'flex-shrink:0;cursor:pointer';
+    imgWrap.onclick = () => showPhotoFull(id);
     const img = document.createElement('img');
     img.src = s.photo;
-    img.style.cssText = 'width:110px;height:110px;object-fit:cover;border-radius:10px;border:2px solid var(--border);cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,.1)';
-    img.onclick = () => showPhotoFull(id);
-    img.title = 'Click to enlarge';
-    photoDiv.appendChild(img);
-    const photoLabel = document.createElement('div');
-    photoLabel.style.cssText = 'font-size:10px;color:#aaa;text-align:center;margin-top:4px';
-    photoLabel.textContent = 'Tap to enlarge';
-    photoDiv.appendChild(photoLabel);
-    topRow.appendChild(photoDiv);
+    img.style.cssText = 'width:100px;height:100px;object-fit:cover;border-radius:10px;border:2px solid #e8e4de;display:block';
+    const lbl = document.createElement('div');
+    lbl.style.cssText = 'font-size:9px;color:#aaa;text-align:center;margin-top:3px';
+    lbl.textContent = 'Tap to enlarge';
+    imgWrap.appendChild(img); imgWrap.appendChild(lbl);
+    topRow.appendChild(imgWrap);
   }
 
-  // Details grid
-  const detailsGrid = document.createElement('div');
-  detailsGrid.style.cssText = 'flex:1;display:grid;grid-template-columns:1fr 1fr;gap:8px';
-  const fields = [
-    ['Sample Type', s.type||'—'],
-    ['Style', s.style||'—'],
-    ['Buyer', s.buyer||'—'],
-    ['Quantity', s.qty ? s.qty+' pcs' : '—'],
-    ['Dispatch Date', s.date || '—'],
-    ['Status', s.status||'—'],
-  ];
-  fields.forEach(([l,v]) => {
-    const cell = document.createElement('div');
-    cell.style.cssText = 'background:#f8f7f5;border-radius:8px;padding:8px 10px';
-    cell.innerHTML = '<div style="font-size:9px;font-weight:700;color:#aaa;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">'+l+'</div>'+
-      '<div style="font-size:13px;font-weight:600;color:#1C1917">'+esc(String(v))+'</div>';
-    detailsGrid.appendChild(cell);
+  const grid = document.createElement('div');
+  grid.style.cssText = 'flex:1;display:grid;grid-template-columns:1fr 1fr;gap:7px';
+  [['Type',s.type],['Style',s.style],['Buyer',s.buyer],['Qty',(s.qty||0)+' pcs'],['Date',s.date||'—'],['Status',s.status]].forEach(([l,v])=>{
+    const c = document.createElement('div');
+    c.style.cssText = 'background:#f8f7f5;border-radius:8px;padding:8px 10px';
+    c.innerHTML = '<div style="font-size:9px;font-weight:700;color:#aaa;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">'+l+'</div>'+
+      '<div style="font-size:13px;font-weight:600;color:#1C1917">'+esc(String(v||'—'))+'</div>';
+    grid.appendChild(c);
   });
-  topRow.appendChild(detailsGrid);
+  topRow.appendChild(grid);
+  body.appendChild(topRow);
 
-  // AWB section
-  const awbSection = document.createElement('div');
-  awbSection.style.cssText = 'background:linear-gradient(135deg,#FDF8EC,#FFF9F0);border:1.5px solid #DFC98A;border-radius:10px;padding:14px 16px';
-  awbSection.innerHTML =
-    '<div style="font-size:10px;font-weight:700;color:#9A7A2E;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">📦 Courier Details</div>'+
-    '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">'+
+  // AWB box
+  const awbBox = document.createElement('div');
+  awbBox.style.cssText = 'background:linear-gradient(135deg,#FDF8EC,#FFFBF0);border:1.5px solid #DFC98A;border-radius:10px;padding:14px 16px';
+  awbBox.innerHTML =
+    '<div style="font-size:10px;font-weight:700;color:#9A7A2E;letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px">📦 Courier Details</div>'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">'+
       '<div>'+
-        '<div style="font-size:12px;font-weight:500;color:#555;margin-bottom:2px">Courier</div>'+
+        '<div style="font-size:11px;color:#888;margin-bottom:2px">Courier</div>'+
         '<div style="font-size:14px;font-weight:700;color:#1C1917">Shree Maruti Courier</div>'+
       '</div>'+
-      '<div>'+
-        '<div style="font-size:12px;font-weight:500;color:#555;margin-bottom:2px">AWB / Tracking</div>'+
-        '<div style="font-size:16px;font-weight:700;color:#C9A84C;letter-spacing:.04em">'+(s.awb||'<span style="font-size:13px;color:#aaa;font-weight:400">Not added yet</span>')+'</div>'+
+      '<div style="text-align:right">'+
+        '<div style="font-size:11px;color:#888;margin-bottom:2px">AWB / Tracking No.</div>'+
+        (s.awb
+          ? '<div style="font-size:18px;font-weight:700;color:#C9A84C;letter-spacing:.05em">'+esc(s.awb)+'</div>'
+          : '<div style="font-size:13px;color:#bbb;font-style:italic">Not added yet</div>')+
       '</div>'+
     '</div>';
+  body.appendChild(awbBox);
 
   // Notes
-  const notesSection = s.notes ? document.createElement('div') : null;
-  if(notesSection){
-    notesSection.style.cssText = 'background:#f8f7f5;border-radius:10px;padding:12px 14px';
-    notesSection.innerHTML =
-      '<div style="font-size:10px;font-weight:700;color:#aaa;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Notes</div>'+
-      '<div style="font-size:13px;color:#444;line-height:1.5">'+esc(s.notes)+'</div>';
+  if(s.notes){
+    const notesBox = document.createElement('div');
+    notesBox.style.cssText = 'background:#f8f7f5;border-radius:10px;padding:12px 14px';
+    notesBox.innerHTML = '<div style="font-size:10px;font-weight:700;color:#aaa;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px">Notes</div>'+
+      '<div style="font-size:13px;color:#444;line-height:1.55">'+esc(s.notes)+'</div>';
+    body.appendChild(notesBox);
   }
 
   // Action buttons
-  const actions = document.createElement('div');
-  actions.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap';
-
+  const btnRow = document.createElement('div');
+  btnRow.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;padding-top:4px';
   const waBtn = document.createElement('button');
-  waBtn.innerHTML = '📱 Send WhatsApp to Buyer';
-  waBtn.style.cssText = 'flex:1;padding:10px 16px;border-radius:8px;border:none;background:#25D366;color:#fff;cursor:pointer;font-family:inherit;font-size:13px;font-weight:600;min-width:180px';
-  waBtn.onclick = () => { modal.remove(); sendSampleWA(id); };
-
+  waBtn.style.cssText = 'flex:1;padding:11px 16px;border-radius:8px;border:none;background:#25D366;color:#fff;cursor:pointer;font-family:inherit;font-size:13px;font-weight:700;min-width:160px';
+  waBtn.textContent = '📱 Send WhatsApp';
+  waBtn.onclick = () => { overlay.remove(); sendSampleWA(id); };
   const editBtn = document.createElement('button');
-  editBtn.innerHTML = '✏️ Edit Sample';
-  editBtn.style.cssText = 'padding:10px 16px;border-radius:8px;border:1.5px solid var(--border);background:#fff;cursor:pointer;font-family:inherit;font-size:13px;color:#555';
-  editBtn.onclick = () => { modal.remove(); editSample(id); };
+  editBtn.style.cssText = 'padding:11px 16px;border-radius:8px;border:1.5px solid #e4e0da;background:#fff;cursor:pointer;font-family:inherit;font-size:13px;color:#555';
+  editBtn.textContent = '✏️ Edit';
+  editBtn.onclick = () => { overlay.remove(); editSample(id); };
+  btnRow.appendChild(waBtn);
+  btnRow.appendChild(editBtn);
+  body.appendChild(btnRow);
 
-  actions.appendChild(waBtn);
-  actions.appendChild(editBtn);
-
-  // ── Assemble ──────────────────────────────────────────
-  body.appendChild(statusBadge);
-  body.appendChild(topRow);
-  body.appendChild(awbSection);
-  if(notesSection) body.appendChild(notesSection);
-  body.appendChild(actions);
-
-  card.appendChild(hdr);
-  card.appendChild(body);
-  modal.appendChild(card);
-  document.body.appendChild(modal);
-
-  document.getElementById('sdClose').onclick = () => modal.remove();
-  modal.addEventListener('click', e => { if(e.target===modal) modal.remove(); });
+  box.appendChild(body);
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
 }
+
 
 // ═══════════════════════════════════════
 // EXPORT & UTILS

@@ -1605,10 +1605,15 @@ function startPoll(){
           if(so.taskAWB && !local.taskAWB) local.taskAWB = so.taskAWB;
           if(so.tasks){
             TASK_COLS.forEach(t=>{
-              // If either local or sheet has a value, keep it
+              // Local value always wins (preserves Order Completed, manual entries)
               if(so.tasks[t] && !local.tasks[t]) local.tasks[t]=so.tasks[t];
-              // (local value already wins if set)
+              // Special: never overwrite Order Completed from sheet with null
+              // (sheet may not have this column yet)
             });
+            // Always preserve local Order Completed status
+            if(local.tasks['Order Completed'] && !so.tasks['Order Completed']){
+              // Keep local completion — sheet may not have the column yet
+            }
           }
         }
       });
@@ -2096,7 +2101,7 @@ function bColor(b){for(const [k,v] of Object.entries(BUYER_COLORS)) if((b||'').t
 function renderCapacity(){
   const panel = document.getElementById('mainPanel');
   const buckets = {};
-  orders.forEach(o => {
+  orders.filter(o => !(o.tasks && o.tasks['Order Completed'])).forEach(o => {
     const raw = o.exFactory || o.deadline;
     if(!raw) return;
     const d = new Date(raw.replace(' ','T'));
@@ -2457,7 +2462,12 @@ function saveAWB(id, awb){
   }
   saveSamples();
   if(activeTab==='samples') renderSamples();
-  if(syncEnabled) gsPost({action:'updateSample',sample:s}).catch(()=>{});
+  // Force sync with full sample object including AWB
+  if(syncEnabled) {
+    gsPost({action:'updateSample', sample:{...s, awb:s.awb}})
+      .then(r => { if(r && r.success) addMsg('assistant','✅ AWB synced to sheet: '+s.awb); })
+      .catch(()=>{ addMsg('assistant','⚠️ AWB saved locally. Sheet sync failed — try manual Sync.'); });
+  }
   addMsg('assistant', '📦 AWB saved for '+s.name+'\nTracking: '+s.awb+'\nStatus updated to Dispatched. Tap "Send to Buyer" to share on WhatsApp.');
 }
 

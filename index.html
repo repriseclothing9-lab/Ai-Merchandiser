@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>AI Merchandiser</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js" defer></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&display=swap" rel="stylesheet">
@@ -703,6 +703,14 @@ let chatHistory = [];
 // INIT
 // ═══════════════════════════════════════
 function init() {
+  // Ensure splash always dismisses even if everything crashes
+  setTimeout(() => {
+    try {
+      const sp = document.getElementById('splash');
+      if(sp){ sp.classList.add('hide'); setTimeout(()=>{ try{sp.remove();}catch(e){} }, 700); }
+    } catch(e){}
+  }, 1800);
+
   // Always show something immediately from localStorage cache
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
@@ -720,6 +728,12 @@ function init() {
 
   renderList();
   updateStat();
+
+  // Dismiss splash after 2.2s no matter what
+  setTimeout(() => {
+    const sp = document.getElementById('splash');
+    if(sp){ sp.classList.add('hide'); setTimeout(()=>{ try{sp.remove();}catch(e){} }, 700); }
+  }, 2200);
 
   // Connect to Supabase on startup
   sbInit();
@@ -1605,8 +1619,13 @@ async function pushTask(flowId, task, value){
 // ── Init: load from Supabase ─────────────────────────────────
 async function sbInit(){
   setSyncUI('Connecting to Supabase...', false, true);
+  // Timeout after 8 seconds — app still works locally if Supabase is slow
+  const timeout = setTimeout(()=>{
+    if(!sbEnabled) setSyncUI('Supabase slow — using local data', false, false);
+  }, 8000);
   try{
     const [rows, srows] = await Promise.all([sbGetOrders(), sbGetSamples()]);
+    clearTimeout(timeout);
 
     if(rows && rows.length > 0){
       // Preserve local Order Completed and photos during merge
@@ -1650,6 +1669,9 @@ async function sbInit(){
     setSyncUI('Connected — '+gsUser, true, false);
     startRealtime();
     renderList(); renderOrder(); updateStat();
+    // Dismiss splash early if still showing
+    const sp = document.getElementById('splash');
+    if(sp){ sp.classList.add('hide'); setTimeout(()=>{ try{sp.remove();}catch(e){} }, 700); }
 
   } catch(e){
     console.error('Supabase init failed:', e);

@@ -746,28 +746,36 @@ function init() {
     gsGet().then(data => {
       if(data && data.orders && data.orders.length > 0) {
         // Sheet has data — it wins completely (it's the master record)
-        orders = data.orders.map(o => ({
-          ...o,
-          tasks: o.tasks || {}
-        }));
-        TASK_COLS.forEach(t => orders.forEach(o => {
-          if(o.tasks[t] === undefined) o.tasks[t] = null;
-        }));
-        // On init: merge sheet samples with local (preserve AWB/photo)
+        // Merge: preserve local Order Completed, taskAWB, remarks
+        const localByIdInit = {};
+        orders.forEach(o => localByIdInit[o.flowId] = o);
+        orders = data.orders.map(o => {
+          const local = localByIdInit[o.flowId];
+          const merged = {...o, tasks: {...(o.tasks || {})}};
+          TASK_COLS.forEach(t => { if(merged.tasks[t] === undefined) merged.tasks[t] = null; });
+          if(local){
+            // Never overwrite local Order Completed with null from sheet
+            if(local.tasks && local.tasks['Order Completed'])
+              merged.tasks['Order Completed'] = local.tasks['Order Completed'];
+            // Keep local taskAWB (PP/Shipment tracking numbers)
+            if(local.taskAWB) merged.taskAWB = {...(merged.taskAWB||{}), ...local.taskAWB};
+            // Keep local remarks if sheet has none
+            if(local.remarks && !merged.remarks) merged.remarks = local.remarks;
+          }
+          return merged;
+        });
+        // Merge samples — preserve local AWB and photo
         if(data.samples && data.samples.length > 0){
-          const localById = {};
-          samples.forEach(s => localById[s.id] = s);
+          const localSById = {};
+          samples.forEach(s => localSById[s.id] = s);
           data.samples.forEach(ss => {
-            if(localById[ss.id]){
-              const local = localById[ss.id];
-              ss.awb   = ss.awb   || local.awb   || '';
-              ss.photo = ss.photo || local.photo || '';
-              Object.assign(local, ss);
-            } else {
-              samples.push(ss);
-            }
+            if(localSById[ss.id]){
+              const loc = localSById[ss.id];
+              ss.awb   = ss.awb   || loc.awb   || '';
+              ss.photo = ss.photo || loc.photo || '';
+              Object.assign(loc, ss);
+            } else { samples.push(ss); }
           });
-          samples = samples; // trigger reassignment
         }
         save(); saveSamples();
         addMsg('assistant', '✅ Loaded ' + orders.length + ' orders from Google Sheets.');

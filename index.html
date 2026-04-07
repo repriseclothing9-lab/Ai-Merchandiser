@@ -726,7 +726,13 @@ function init() {
     orders = JSON.parse(JSON.stringify(ORDERS_DATA));
   }
 
+  // Make sure orders are loaded before rendering
+  if(!orders || orders.length === 0) {
+    orders = JSON.parse(JSON.stringify(ORDERS_DATA));
+    save();
+  }
   renderList();
+  renderOrder();
   updateStat();
 
   // Dismiss splash after 2.2s no matter what
@@ -1646,11 +1652,20 @@ async function sbInit(){
         return o;
       });
     } else {
-      // Empty DB — push local data up
-      setSyncUI('Pushing your orders to Supabase...', false, true);
-      for(const o of orders){
-        try{ await sbUpsertOrder(o); } catch(e){}
+      // Empty DB — use ORDERS_DATA as source and push to Supabase
+      setSyncUI('First time setup — pushing orders to Supabase...', false, true);
+      // Make sure we have the hardcoded orders
+      if(!orders || orders.length === 0){
+        orders = JSON.parse(JSON.stringify(ORDERS_DATA));
+        save();
       }
+      // Push all orders to Supabase
+      let pushed = 0;
+      for(const o of orders){
+        try{ await sbUpsertOrder(o); pushed++; } catch(e){ console.warn('Push failed:', e.message); }
+      }
+      addMsg('assistant', '✅ Pushed '+pushed+' orders to Supabase! All devices will now sync automatically.');
+      renderList(); renderOrder(); updateStat();
     }
 
     if(srows && srows.length > 0){
@@ -1674,8 +1689,15 @@ async function sbInit(){
     if(sp){ sp.classList.add('hide'); setTimeout(()=>{ try{sp.remove();}catch(e){} }, 700); }
 
   } catch(e){
-    console.error('Supabase init failed:', e);
+    clearTimeout(timeout);
+    console.error('Supabase init failed:', e.message);
     setSyncUI('Supabase offline — local mode', false, false);
+    // Still show local data
+    if(!orders || orders.length === 0){
+      orders = JSON.parse(JSON.stringify(ORDERS_DATA));
+      save();
+    }
+    renderList(); renderOrder(); updateStat();
   }
 }
 
@@ -1800,6 +1822,733 @@ async function gsPost(body){
     }
   } catch(e){ console.warn('gsPost routing failed:', e.message); }
   return { success: true };
+}
+
+
+// ═══════════════════════════════════════
+// TNA TEMPLATES + DELAY DETECTION
+// ═══════════════════════════════════════
+const TNA_TEMPLATES = {
+  'COBB': {
+    'Fabric Order':4,'Trims Order':3,'Trims Approval':1,'Trims Payment':4,'Labdips':11,
+    'Bulk Fabric In-house':49,'Fit Sample Indent':10,'Fit Sample Dispatch':14,
+    'Fit Sample Approval':22,'Trims In-House':16,'PP Sample Indent':51,
+    'PP Sample Dispatch':55,'PP Sample Recieve':59,'PP Sample Approval':51,
+    'Cutting':58,'Sewing':68,'Inline Inspection':73,'Finishing':79,'Packing':82,
+    'Final Inspection':84,'Shipment Sample Dispatch':84,'Shipment Sample Approval':88,'Ex-Factory':88
+  },
+  'OWND': {
+    'Fabric Order':4,'Trims Order':3,'Trims Approval':1,'Trims Payment':4,'Labdips':22,
+    'Bulk Fabric In-house':34,'Fit Sample Dispatch':4,'Fit Sample Approval':12,
+    'Trims In-House':16,'PP Sample Dispatch':38,'GPT Indent To Testing Agency':39,
+    'GPT Approval':46,'PP Sample Approval':48,'Cutting':52,'Sewing':62,
+    'Inline Inspection':65,'Finishing':70,'Packing':71,'Final Inspection':73,'Ex-Factory':73
+  },
+  'MUFTI': {
+    'Fabric Order':4,'Trims Order':1,'Trims Approval':2,'Trims Payment':2,'Labdips':14,
+    'Bulk Fabric In-house':39,'Fit Sample Dispatch':6,'Fit Sample Approval':11,
+    'Trims In-House':12,'PP Sample Dispatch':42,'FPT Approval':45,'PP Sample Recieve':45,
+    'GPT Indent To Testing Agency':46,'GPT Approval':45,'PP Sample Approval':47,
+    'Cutting':43,'Sewing':53,'Inline Inspection':53,'Finishing':58,'Packing':61,
+    'Final Inspection':63,'Shipment Sample Dispatch':63,'Shipment Sample Approval':65,'Ex-Factory':65
+  }
+};
+TNA_TEMPLATES['STYLI'] = TNA_TEMPLATES['OWND'];
+TNA_TEMPLATES['STYLI WOMEN GCC'] = TNA_TEMPLATES['OWND'];
+const TNA_DAYS = TNA_TEMPLATES['OWND'];
+
+function getTNAForBuyer(buyer){
+  const b=(buyer||'').toUpperCase();
+  for(const [k,v] of Object.entries(TNA_TEMPLATES)) if(b.includes(k)) return v;
+  return TNA_DAYS;
+}
+function addDays(dateStr,days){
+  const d=new Date((dateStr||'').replace(' ','T'));
+  if(isNaN(d)) return dateStr||'';
+  d.setDate(d.getDate()+days);
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function getDelays(o){
+  if(!o.tasks) return [];
+  const today=new Date(); today.setHours(0,0,0,0);
+  const tna=getTNAForBuyer(o.buyer);
+  const base=(o.orderDate||o.deadline||o.exFactory||'').slice(0,10);
+  if(!base) return [];
+  const delays=[];
+  Object.entries(tna).forEach(([task,daysF])=>{
+    if(task==='Order Completed'||task==='Ex-Factory') return;
+    const val=o.tasks[task];
+    const plannedDate=addDays(base,daysF);
+    const planned=new Date(plannedDate); planned.setHours(0,0,0,0);
+    if(val&&val.includes('(planned)')){
+      const pd=new Date(val.replace(' (planned)','').replace(' ','T')); pd.setHours(0,0,0,0);
+      const late=Math.round((today-pd)/86400000);
+      if(late>0) delays.push({task,daysLate:late,planned:val.replace(' (planned)','').slice(0,10),status:'overdue'});
+    } else if(!val){
+      const late=Math.round((today-planned)/86400000);
+      if(late>1) delays.push({task,daysLate:late,planned:plannedDate,status:'pending_late'});
+    }
+  });
+  return delays.sort((a,b)=>b.daysLate-a.daysLate);
+}
+function getOrderUrgency(o){
+  if(!o.exFactory||o.tasks?.['Order Completed']) return 'done';
+  const today=new Date(); today.setHours(0,0,0,0);
+  const ef=new Date((o.exFactory||'').replace(' ','T')); ef.setHours(0,0,0,0);
+  const daysToEF=Math.round((ef-today)/86400000);
+  const delays=getDelays(o);
+  if(delays.length>3||daysToEF<7) return 'critical';
+  if(delays.length>0||daysToEF<21) return 'warning';
+  return 'ok';
+}
+
+// ═══════════════════════════════════════
+// BUYER COLORS
+// ═══════════════════════════════════════
+const BUYER_COLORS={
+  'OWND':[26,107,74],'MUFTI':[24,95,165],'COBB':[180,116,9],
+  'STYLI WOMEN GCC':[126,34,206],'STYLI MEN GCC':[147,51,234],
+  'STYLI WOMEN B2B':[168,85,247],'STYLI':[126,34,206],
+  'RARE & BASIC WOMEN':[219,39,119],'RARE & BASIC MEN':[8,145,178],
+  'SO WHATT':[234,88,12]
+};
+function bColor(b){
+  for(const[k,v] of Object.entries(BUYER_COLORS)) if((b||'').toUpperCase().includes(k)) return 'rgb('+v.join(',')+')';
+  return '#888';
+}
+
+// ═══════════════════════════════════════
+// CAPACITY DASHBOARD
+// ═══════════════════════════════════════
+function renderCapacity(){
+  const panel=document.getElementById('mainPanel');
+  const activeOrders=orders.filter(o=>!(o.tasks&&o.tasks['Order Completed']));
+  const buckets={};
+  activeOrders.forEach(o=>{
+    const raw=o.exFactory||o.deadline; if(!raw) return;
+    const d=new Date(raw.replace(' ','T')); if(isNaN(d.getTime())) return;
+    const key=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+    const label=d.toLocaleString('default',{month:'long'})+' '+d.getFullYear();
+    if(!buckets[key]) buckets[key]={key,label,qty:0,count:0,buyers:{}};
+    buckets[key].qty+=(parseInt(o.qty)||0);
+    buckets[key].count++;
+    const b=(o.buyer||'Other').trim();
+    buckets[key].buyers[b]=(buckets[key].buyers[b]||0)+(parseInt(o.qty)||0);
+  });
+  const months=Object.values(buckets).sort((a,b)=>a.key.localeCompare(b.key));
+  const maxQty=months.length?Math.max(...months.map(m=>m.qty),1):1;
+  const totalQty=months.reduce((s,m)=>s+m.qty,0);
+  const buyerTotals={};
+  activeOrders.forEach(o=>{const b=(o.buyer||'Other').trim();buyerTotals[b]=(buyerTotals[b]||0)+(parseInt(o.qty)||0);});
+  const buyerList=Object.entries(buyerTotals).sort((a,b)=>b[1]-a[1]);
+  const maxBuyer=buyerList.length?buyerList[0][1]:1;
+  const taskCols26=TASK_COLS.filter(t=>t!=='Order Completed'&&t!=='Ex-Factory');
+  const totalDone=activeOrders.reduce((a,o)=>a+taskCols26.filter(t=>o.tasks&&o.tasks[t]&&!String(o.tasks[t]).includes('(planned)')).length,0);
+  const totalTasks=activeOrders.length*taskCols26.length;
+  const overallPct=totalTasks?Math.round(totalDone/totalTasks*100):0;
+
+  function bCol(qty,max){const p=qty/max;return p>=0.75?'#e53e3e':p>=0.4?'#f59e0b':'#1a6b4a';}
+  function bBadge(qty,max){const p=qty/max;
+    if(p>=0.75) return '<span class="m-badge" style="background:#fef2f2;color:#991b1b">High</span>';
+    if(p>=0.4)  return '<span class="m-badge" style="background:#fff8e1;color:#b45309">Med</span>';
+    return '<span class="m-badge" style="background:#f0fdf4;color:#166534">Low</span>';}
+
+  const monthCards=months.map(m=>{
+    const pct=Math.round(m.qty/maxQty*100),col=bCol(m.qty,maxQty);
+    const chips=Object.entries(m.buyers).sort((a,b)=>b[1]-a[1]).map(([b,q])=>
+      '<span class="m-buyer-chip" style="background:'+bColor(b)+'33;color:'+bColor(b)+'">'+b+': '+q.toLocaleString()+'</span>').join('');
+    return '<div class="m-card" onclick="showMonthOrders(\''+m.key+'\')" style="cursor:pointer">'+bBadge(m.qty,maxQty)+
+      '<div class="m-card-month">'+m.label+'</div>'+
+      '<div class="m-card-qty" style="color:'+col+'">'+m.qty.toLocaleString()+'<span style="font-size:12px;font-weight:400;color:var(--text3)"> pcs</span></div>'+
+      '<div class="m-card-sub">'+m.count+' order'+(m.count!==1?'s':'')+' ↗ View</div>'+
+      '<div class="m-bar-bg"><div class="m-bar" style="width:'+pct+'%;background:'+col+'"></div></div>'+
+      '<div class="m-buyers">'+chips+'</div></div>';
+  }).join('');
+
+  const buyerRows=buyerList.map(([b,q])=>
+    '<div class="buyer-row"><div class="buyer-name"><span style="width:10px;height:10px;border-radius:50%;background:'+bColor(b)+';display:inline-block;flex-shrink:0"></span>'+b+'</div>'+
+    '<div class="bbar-bg"><div class="bbar" style="width:'+Math.round(q/maxBuyer*100)+'%;background:'+bColor(b)+'"></div></div>'+
+    '<div class="buyer-qty-label">'+q.toLocaleString()+' pcs</div></div>').join('');
+
+  const tableRows=months.map(m=>{
+    const pct=Math.round(m.qty/maxQty*100),col=bCol(m.qty,maxQty);
+    const bCells=Object.entries(m.buyers).sort((a,b)=>b[1]-a[1]).map(([b,q])=>
+      '<span style="display:inline-flex;align-items:center;gap:3px;margin-right:8px;font-size:11px"><span style="width:6px;height:6px;border-radius:50%;background:'+bColor(b)+';display:inline-block"></span>'+b+' <strong>'+q.toLocaleString()+'</strong></span>').join('');
+    return '<tr><td style="font-weight:600;white-space:nowrap">'+m.label+'</td><td style="font-size:16px;font-weight:700;color:'+col+'">'+m.qty.toLocaleString()+'</td><td style="color:var(--text3)">'+m.count+'</td><td>'+bCells+'</td><td style="min-width:90px"><div class="m-bar-bg"><div class="m-bar" style="width:'+pct+'%;background:'+col+'"></div></div></td></tr>';
+  }).join('');
+
+  // Donut chart via SVG
+  const r=54,circ=2*Math.PI*r,dashOff=circ*(1-overallPct/100);
+  const secData=[
+    {label:'Material',tasks:['Fabric Order','Trims Order','Trims Approval','Trims Payment','Labdips','Bulk Fabric In-house','Trims In-House'],color:'#4A90D9'},
+    {label:'Sampling',tasks:['Fit Sample Indent','Fit Sample Dispatch','Fit Sample Approval','PP Sample Indent','PP Sample Dispatch','PP Sample Recieve','FPT Approval','GPT Indent To Testing Agency','GPT Approval','PP Sample Approval'],color:'#F4845F'},
+    {label:'Production',tasks:['Cutting','Sewing','Inline Inspection','Finishing','Packing','Final Inspection'],color:'#52B788'},
+    {label:'Shipment',tasks:['Shipment Sample Dispatch','Shipment Sample Approval','Ex-Factory'],color:'#C9A84C'}
+  ];
+  const secBars=secData.map(s=>{
+    const td=activeOrders.length*s.tasks.length,sd=activeOrders.reduce((a,o)=>a+s.tasks.filter(t=>o.tasks&&o.tasks[t]&&!String(o.tasks[t]).includes('(planned)')).length,0);
+    const sp=td?Math.round(sd/td*100):0;
+    return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px"><div style="width:10px;height:10px;border-radius:50%;background:'+s.color+';flex-shrink:0"></div><div style="font-size:11px;color:var(--text2);min-width:70px">'+s.label+'</div><div style="flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden"><div style="height:100%;width:'+sp+'%;background:'+s.color+';border-radius:3px"></div></div><div style="font-size:11px;color:var(--text3);min-width:32px;text-align:right">'+sp+'%</div></div>';
+  }).join('');
+
+  panel.innerHTML=
+    '<div class="main-header" style="flex-shrink:0"><div style="display:flex;justify-content:space-between;align-items:center"><h2>Capacity Dashboard</h2><div style="font-size:11px;color:var(--text3)">Based on Ex-Factory dates (active orders only)</div></div></div>'+
+    '<div class="dash-wrap">'+
+      '<div><div class="dash-section-title">Overview</div>'+
+        '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 300px;gap:12px;align-items:stretch">'+
+          '<div class="dash-kpi"><div class="dash-kpi-n">'+activeOrders.length+'</div><div class="dash-kpi-l">Active Orders</div></div>'+
+          '<div class="dash-kpi"><div class="dash-kpi-n" style="font-size:16px">'+totalQty.toLocaleString()+'</div><div class="dash-kpi-l">Total Pieces</div></div>'+
+          '<div class="dash-kpi"><div class="dash-kpi-n">'+months.length+'</div><div class="dash-kpi-l">Months Booked</div></div>'+
+          '<div class="dash-kpi" style="display:flex;align-items:center;gap:16px">'+
+            '<div style="position:relative;flex-shrink:0"><svg width="70" height="70" viewBox="0 0 130 130"><circle cx="65" cy="65" r="54" fill="none" stroke="var(--border)" stroke-width="14"/><circle cx="65" cy="65" r="54" fill="none" stroke="#C9A84C" stroke-width="14" stroke-dasharray="'+circ.toFixed(1)+'" stroke-dashoffset="'+dashOff.toFixed(1)+'" stroke-linecap="round" transform="rotate(-90 65 65)"/></svg><div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center"><span style="font-size:16px;font-weight:700;color:var(--text)">'+overallPct+'%</span></div></div>'+
+            '<div style="flex:1"><div style="font-size:11px;font-weight:600;color:var(--text);margin-bottom:8px">Task Completion</div>'+secBars+'</div>'+
+          '</div>'+
+        '</div>'+
+      '</div>'+
+      (months.length?'<div><div class="dash-section-title">Monthly Capacity</div><div class="month-grid">'+monthCards+'</div></div>':'<div style="color:var(--text3);padding:20px;text-align:center">No ex-factory dates set yet.</div>')+
+      (buyerList.length?'<div><div class="dash-section-title">Buyer Breakdown</div><div class="buyer-breakdown-card">'+buyerRows+'</div></div>':'')+
+      (months.length?'<div><div class="dash-section-title">Month Detail</div><table class="detail-table"><thead><tr><th>Month</th><th>Pieces</th><th>Orders</th><th>By Buyer</th><th>Load</th></tr></thead><tbody>'+tableRows+'</tbody></table></div>':'')+
+    '</div>';
+}
+
+function showMonthOrders(monthKey){
+  const mo=orders.filter(o=>{
+    const raw=o.exFactory||o.deadline; if(!raw) return false;
+    const d=new Date(raw.replace(' ','T')); if(isNaN(d.getTime())) return false;
+    return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')===monthKey;
+  });
+  const panel=document.getElementById('mainPanel');
+  const totalQty=mo.reduce((s,o)=>s+(parseInt(o.qty)||0),0);
+  const label=mo.length?new Date(mo[0].exFactory.replace(' ','T')).toLocaleString('default',{month:'long',year:'numeric'}):monthKey;
+  const taskCols26=TASK_COLS.filter(t=>t!=='Order Completed'&&t!=='Ex-Factory');
+  const rows=mo.map(o=>{
+    const ri=orders.indexOf(o);
+    const isComp=o.tasks&&o.tasks['Order Completed'];
+    const done=taskCols26.filter(t=>o.tasks&&o.tasks[t]&&!String(o.tasks[t]).includes('(planned)')).length;
+    const pct=Math.round(done/taskCols26.length*100);
+    const col=pct===100?'#1a6b4a':pct>=50?'#f59e0b':'#888';
+    return '<tr onclick="goToOrder('+ri+')" style="cursor:pointer"><td style="font-weight:600">#'+o.flowId+'</td><td>'+o.style.trim()+' <span style="color:var(--text3)">'+o.color.trim()+'</span></td><td>'+o.product+'</td><td><span style="padding:2px 8px;border-radius:8px;font-size:11px;background:'+bColor(o.buyer)+'22;color:'+bColor(o.buyer)+'">'+o.buyer+'</span></td><td style="font-weight:600">'+((parseInt(o.qty)||0).toLocaleString())+'</td><td><div style="display:flex;align-items:center;gap:6px"><div class="m-bar-bg" style="min-width:60px;flex:1"><div class="m-bar" style="width:'+pct+'%;background:'+col+'"></div></div><span style="font-size:11px;color:'+col+'">'+pct+'%</span></div></td><td>'+(isComp?'<span style="font-size:11px;padding:2px 8px;border-radius:8px;background:#f0fdf4;color:#166534;font-weight:600">✓ Done</span>':'')+'</td></tr>';
+  }).join('');
+  panel.innerHTML='<div class="main-header" style="flex-shrink:0"><div style="display:flex;align-items:center;gap:12px"><button onclick="renderCapacity()" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:13px;font-family:inherit">← Back</button><h2>'+label+'</h2><span style="font-size:12px;color:var(--text3)">'+mo.length+' orders · '+totalQty.toLocaleString()+' pcs</span></div></div>'+
+    '<div class="dash-wrap"><table class="detail-table"><thead><tr><th>Flow ID</th><th>Style</th><th>Product</th><th>Buyer</th><th>Qty</th><th>Progress</th><th>Status</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+}
+
+function goToOrder(idx){
+  selectedIdx=idx; switchTab('orders'); renderOrder(); renderList();
+  setTimeout(()=>{const sel=document.querySelector('.order-item.sel');if(sel)sel.scrollIntoView({behavior:'smooth',block:'nearest'});},100);
+}
+
+// ═══════════════════════════════════════
+// ALERTS
+// ═══════════════════════════════════════
+function renderAlerts(){
+  const panel=document.getElementById('mainPanel');
+  const today=new Date(); today.setHours(0,0,0,0);
+  const allAlerts=[];
+  orders.forEach(o=>{
+    if(o.tasks&&o.tasks['Order Completed']) return;
+    const delays=getDelays(o);
+    delays.forEach(d=>allAlerts.push({...d,order:o,urgency:getOrderUrgency(o)}));
+  });
+  const efSoon=orders.filter(o=>{
+    if(o.tasks&&o.tasks['Order Completed']) return false;
+    if(!o.exFactory) return false;
+    const ef=new Date(o.exFactory.replace(' ','T')); ef.setHours(0,0,0,0);
+    const days=Math.round((ef-today)/86400000);
+    return days>=0&&days<=30;
+  }).sort((a,b)=>new Date(a.exFactory)-new Date(b.exFactory));
+  const byOrder={};
+  allAlerts.forEach(a=>{const k=a.order.flowId;if(!byOrder[k])byOrder[k]={order:a.order,items:[],urgency:a.urgency};byOrder[k].items.push(a);if(a.urgency==='critical')byOrder[k].urgency='critical';});
+  const alertOrders=Object.values(byOrder).sort((a,b)=>{if(a.urgency==='critical'&&b.urgency!=='critical')return -1;if(b.urgency==='critical'&&a.urgency!=='critical')return 1;return b.items.length-a.items.length;});
+  const critical=allAlerts.filter(a=>a.urgency==='critical').length;
+  const warnings=allAlerts.filter(a=>a.urgency==='warning').length;
+  const efRows=efSoon.map(o=>{
+    const ef=new Date(o.exFactory.replace(' ','T')); ef.setHours(0,0,0,0);
+    const days=Math.round((ef-today)/86400000);
+    const col=days<=7?'#e53e3e':days<=14?'#f59e0b':'#1a6b4a';
+    const ri=orders.indexOf(o);
+    return '<tr onclick="goToOrder('+ri+')" style="cursor:pointer"><td style="font-weight:600">#'+o.flowId+'</td><td>'+o.style.trim()+' '+o.color.trim()+'</td><td>'+o.buyer+'</td><td style="font-weight:600;color:'+col+'">'+o.exFactory.slice(0,10)+'</td><td style="font-weight:700;color:'+col+'">'+days+' days</td></tr>';
+  }).join('');
+  const alertCards=alertOrders.map(({order:o,items,urgency})=>{
+    const ri=orders.indexOf(o);
+    const col=urgency==='critical'?'#e53e3e':'#f59e0b';
+    const bg=urgency==='critical'?'#fef2f2':'#fff8e1';
+    const rows2=items.slice(0,4).map(d=>'<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #f5f5f5"><span style="font-size:12px;color:#444">'+d.task+'</span><span style="font-size:11px;font-weight:600;color:'+col+'">'+d.daysLate+' days late</span></div>').join('');
+    return '<div style="background:#fff;border:1px solid '+col+'33;border-left:3px solid '+col+';border-radius:10px;padding:14px;margin-bottom:10px;cursor:pointer" onclick="goToOrder('+ri+')"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><div><span style="font-size:13px;font-weight:600">#'+o.flowId+' '+o.style.trim()+' '+o.color.trim()+'</span><span style="font-size:11px;color:var(--text3);margin-left:8px">'+o.buyer+' · EF: '+(o.exFactory||'—').slice(0,10)+'</span></div><span style="font-size:10px;padding:2px 8px;border-radius:8px;background:'+bg+';color:'+col+';font-weight:700">'+(urgency==='critical'?'CRITICAL':'WARNING')+' · '+items.length+' delays</span></div>'+rows2+'<div style="font-size:11px;color:var(--text3);margin-top:6px">↗ Click to open order</div></div>';
+  }).join('');
+  panel.innerHTML='<div class="main-header" style="flex-shrink:0"><div style="display:flex;justify-content:space-between;align-items:center"><h2>Alerts & Delays</h2><div style="display:flex;gap:12px;font-size:12px"><span style="color:#e53e3e;font-weight:600">'+critical+' critical</span><span style="color:#f59e0b;font-weight:600">'+warnings+' warnings</span></div></div></div>'+
+    '<div class="dash-wrap">'+
+    (efSoon.length?'<div><div class="dash-section-title">Ex-Factory in next 30 days</div><table class="detail-table"><thead><tr><th>Flow ID</th><th>Style</th><th>Buyer</th><th>Ex-Factory</th><th>Days Left</th></tr></thead><tbody>'+efRows+'</tbody></table></div>':'')+
+    '<div><div class="dash-section-title">'+(alertOrders.length?alertOrders.length+' orders with delays':'No delays detected 🎉')+'</div>'+(alertOrders.length?alertCards:'<div style="text-align:center;padding:40px;color:var(--text3)">All tasks on track! Use Auto TNA to enable delay tracking.</div>')+'</div>'+
+    '</div>';
+}
+
+// ═══════════════════════════════════════
+// BUYER REPORT
+// ═══════════════════════════════════════
+function renderReport(){
+  const panel=document.getElementById('mainPanel');
+  const active=orders.filter(o=>!(o.tasks&&o.tasks['Order Completed']));
+  const taskCols26=TASK_COLS.filter(t=>t!=='Order Completed'&&t!=='Ex-Factory');
+  const buyers={};
+  active.forEach(o=>{
+    const b=(o.buyer||'Other').trim();
+    if(!buyers[b]) buyers[b]={name:b,orders:[],totalQty:0,totalTasks:0,doneTasks:0,delayed:0};
+    const done=taskCols26.filter(t=>o.tasks&&o.tasks[t]&&!String(o.tasks[t]).includes('(planned)')).length;
+    const delays=getDelays(o);
+    buyers[b].orders.push({...o,done,delays});
+    buyers[b].totalQty+=(parseInt(o.qty)||0);
+    buyers[b].totalTasks+=taskCols26.length;
+    buyers[b].doneTasks+=done;
+    if(delays.length>0) buyers[b].delayed++;
+  });
+  const today=new Date(); today.setHours(0,0,0,0);
+  const buyerList=Object.values(buyers).sort((a,b)=>(b.delayed-a.delayed)||(b.totalQty-a.totalQty));
+  const sections=buyerList.map(b=>{
+    const pct=b.totalTasks?Math.round(b.doneTasks/b.totalTasks*100):0;
+    const col=bColor(b.name);
+    const orderRows=b.orders.sort((a,z)=>{
+      const ad=a.exFactory?new Date(a.exFactory):new Date('2099-01-01');
+      const zd=z.exFactory?new Date(z.exFactory):new Date('2099-01-01');
+      return ad-zd;
+    }).map(o=>{
+      const ri=orders.indexOf(o);
+      const opct=Math.round(o.done/taskCols26.length*100);
+      const ef=o.exFactory?new Date(o.exFactory.replace(' ','T')):null;
+      const daysToEF=ef?Math.round((ef-today)/86400000):null;
+      const efColor=daysToEF===null?'#888':daysToEF<7?'#e53e3e':daysToEF<21?'#f59e0b':'#1a6b4a';
+      const nextTask=taskCols26.find(t=>!o.tasks[t]||String(o.tasks[t]).includes('(planned)'));
+      return '<tr onclick="goToOrder('+ri+')" style="cursor:pointer"><td style="font-weight:600">#'+o.flowId+'</td><td>'+o.style.trim()+' <span style="color:var(--text3)">'+o.color.trim()+'</span></td><td style="font-weight:600">'+((parseInt(o.qty)||0).toLocaleString())+'</td><td style="color:'+efColor+';font-weight:600">'+(daysToEF===null?'—':daysToEF<0?'OVERDUE':daysToEF+' days')+'</td><td><div style="display:flex;align-items:center;gap:6px"><div class="m-bar-bg" style="min-width:50px;flex:1"><div class="m-bar" style="width:'+opct+'%;background:'+(opct===100?'#1a6b4a':opct>=50?'#f59e0b':'#e53e3e')+'"></div></div><span style="font-size:11px;color:var(--text3)">'+opct+'%</span></div></td><td style="font-size:11px;color:var(--text3)">'+(nextTask||'Complete ✓')+'</td><td>'+(o.delays.length>0?'<span style="font-size:10px;padding:2px 6px;border-radius:6px;background:#fef2f2;color:#991b1b;font-weight:600">'+o.delays.length+' delays</span>':'')+'</td></tr>';
+    }).join('');
+    return '<div style="margin-bottom:24px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><div style="display:flex;align-items:center;gap:10px"><span style="width:12px;height:12px;border-radius:50%;background:'+col+';display:inline-block"></span><span style="font-size:14px;font-weight:700">'+b.name+'</span><span style="font-size:12px;color:var(--text3)">'+b.orders.length+' orders · '+b.totalQty.toLocaleString()+' pcs</span></div><div style="display:flex;align-items:center;gap:16px">'+(b.delayed>0?'<span style="font-size:11px;color:#e53e3e;font-weight:600">⚠ '+b.delayed+' delayed</span>':'')+'<span style="font-size:11px;color:var(--text3)">Overall: <strong>'+pct+'%</strong></span></div></div><table class="detail-table"><thead><tr><th>Flow ID</th><th>Style</th><th>Qty</th><th>EF in</th><th>Progress</th><th>Next Task</th><th></th></tr></thead><tbody>'+orderRows+'</tbody></table></div>';
+  }).join('');
+  const totalActive=active.length,totalQtyAll=active.reduce((s,o)=>s+(parseInt(o.qty)||0),0),totalDelayed=active.filter(o=>getDelays(o).length>0).length;
+  panel.innerHTML='<div class="main-header" style="flex-shrink:0"><div style="display:flex;justify-content:space-between;align-items:center"><h2>Buyer-wise Pending Report</h2><div style="font-size:11px;color:var(--text3)">'+totalActive+' active orders · '+totalQtyAll.toLocaleString()+' pcs · '+totalDelayed+' delayed</div></div></div>'+
+    '<div class="dash-wrap">'+(buyerList.length?sections:'<div style="text-align:center;padding:40px;color:var(--text3)">No active orders.</div>')+'</div>';
+}
+
+// ═══════════════════════════════════════
+// AUTO TNA
+// ═══════════════════════════════════════
+function applyTNA(orderIdx){
+  const o=orders[orderIdx]; if(!o) return;
+  const orderDate=o.orderDate||o.deadline;
+  if(!orderDate){alert('Please set an Order Date first.');return;}
+  const tna=getTNAForBuyer(o.buyer);
+  const buyerName=o.buyer||'generic';
+  const totalDays=Math.max(...Object.values(tna));
+  if(!confirm('Apply '+buyerName+' TNA ('+totalDays+' day template) to '+o.style.trim()+' '+o.color.trim()+'?\n\nBase date: '+orderDate.slice(0,10)+'\nThis fills all empty tasks with planned dates.')) return;
+  if(!o.tasks) o.tasks={};
+  let filled=0;
+  const base=orderDate.slice(0,10);
+  Object.entries(tna).forEach(([task,daysForward])=>{
+    if(task==='Order Completed') return;
+    if(!o.tasks[task]){o.tasks[task]=addDays(base,daysForward)+' (planned)';filled++;}
+  });
+  save(); renderOrderKeepScroll();
+  if(syncEnabled) pushTask(o.flowId,'_bulk_','').catch(()=>{});
+  addMsg('assistant','📅 TNA applied for '+o.style.trim()+' '+o.color.trim()+'\nTemplate: '+buyerName+' ('+totalDays+' days)\nFilled: '+filled+' planned dates');
+}
+
+// ═══════════════════════════════════════
+// WHATSAPP
+// ═══════════════════════════════════════
+function sendWhatsApp(orderIdx){
+  const o=orders[orderIdx]; if(!o) return;
+  const taskCols26=TASK_COLS.filter(t=>t!=='Order Completed'&&t!=='Ex-Factory');
+  const done=taskCols26.filter(t=>o.tasks&&o.tasks[t]&&!String(o.tasks[t]).includes('(planned)')).length;
+  const pct=Math.round(done/taskCols26.length*100);
+  const delays=getDelays(o);
+  const today=new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+  const nextPending=taskCols26.find(t=>!o.tasks[t]||String(o.tasks[t]).includes('(planned)'));
+  const GROUPS={'Material & Trims':['Fabric Order','Trims Order','Trims Approval','Trims Payment','Labdips','Bulk Fabric In-house','Trims In-House'],'Sampling':['Fit Sample Indent','Fit Sample Dispatch','Fit Sample Approval','PP Sample Indent','PP Sample Dispatch','PP Sample Recieve','FPT Approval','GPT Indent To Testing Agency','GPT Approval','PP Sample Approval'],'Production':['Cutting','Sewing','Inline Inspection','Finishing','Packing','Final Inspection'],'Shipment':['Shipment Sample Dispatch','Shipment Sample Approval','Ex-Factory']};
+  let statusLines='';
+  for(const[grp,tasks] of Object.entries(GROUPS)){
+    const doneG=tasks.filter(t=>o.tasks&&o.tasks[t]&&!String(o.tasks[t]).includes('(planned)'));
+    const pendG=tasks.filter(t=>!o.tasks[t]||String(o.tasks[t]).includes('(planned)'));
+    if(!doneG.length&&!pendG.length) continue;
+    statusLines+='\n*'+grp+':*';
+    doneG.forEach(t=>statusLines+='\n✅ '+t+' ('+(o.tasks[t]||'').slice(0,10)+')');
+    pendG.slice(0,2).forEach(t=>statusLines+='\n⏳ '+t);
+    if(pendG.length>2) statusLines+='\n   + '+(pendG.length-2)+' more pending';
+  }
+  const delayNote=delays.length>0?'\n\n⚠️ *Delays:*\n'+delays.slice(0,3).map(d=>'• '+d.task+' — '+d.daysLate+' days behind').join('\n'):'';
+  const msg='🧵 *Order Status Update*\n━━━━━━━━━━━━━━━━━━━━\n*Style:* '+o.style.trim()+' — '+o.color.trim()+'\n*Buyer:* '+(o.buyer||'—')+'\n*Flow ID:* #'+o.flowId+'\n*PO:* '+(o.po||'—')+'\n*Qty:* '+(o.qty||0).toLocaleString()+' pcs\n*Ex-Factory:* '+(o.exFactory||'—').slice(0,10)+'\n*Progress:* '+done+'/'+taskCols26.length+' tasks ('+pct+'%)\n━━━━━━━━━━━━━━━━━━━━'+statusLines+delayNote+'\n\n'+(nextPending?'📌 *Next Action:* '+nextPending:'✅ *All tasks completed!')+'\n\nReport generated: '+today+' | AI Merchandiser';
+  showWAModal(msg);
+}
+
+function showWAModal(msg){
+  const existing=document.getElementById('waModal'); if(existing) existing.remove();
+  const modal=document.createElement('div'); modal.id='waModal';
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1000;display:flex;align-items:center;justify-content:center';
+  const card=document.createElement('div');
+  card.style.cssText='background:#fff;border-radius:12px;padding:24px;width:520px;max-width:95vw;max-height:90vh;display:flex;flex-direction:column;gap:16px';
+  const hdr=document.createElement('div'); hdr.style.cssText='display:flex;justify-content:space-between;align-items:center';
+  const t=document.createElement('h2'); t.style.cssText='font-size:15px;font-weight:600'; t.textContent='WhatsApp Message Preview';
+  const closeX=document.createElement('button'); closeX.textContent='✕'; closeX.style.cssText='background:none;border:none;font-size:18px;cursor:pointer;color:#888'; closeX.onclick=()=>modal.remove();
+  hdr.appendChild(t); hdr.appendChild(closeX);
+  const preview=document.createElement('div');
+  preview.style.cssText='background:#e8f5e9;border-radius:10px;padding:14px;overflow-y:auto;flex:1;max-height:400px;font-size:12px;white-space:pre-wrap;line-height:1.6;color:#1a1a18';
+  preview.textContent=msg;
+  const btnRow=document.createElement('div'); btnRow.style.cssText='display:flex;gap:8px';
+  const copyBtn=document.createElement('button'); copyBtn.textContent='📋 Copy Message'; copyBtn.style.cssText='flex:1;padding:10px;border-radius:8px;border:1px solid #ddd;background:#fff;cursor:pointer;font-family:inherit;font-size:13px';
+  copyBtn.onclick=()=>navigator.clipboard.writeText(msg).then(()=>{copyBtn.textContent='✅ Copied!';setTimeout(()=>copyBtn.textContent='📋 Copy Message',2000);});
+  const waBtn=document.createElement('button'); waBtn.textContent='📱 Open WhatsApp'; waBtn.style.cssText='flex:1;padding:10px;border-radius:8px;border:none;background:#25d366;color:#fff;cursor:pointer;font-family:inherit;font-size:13px;font-weight:600';
+  waBtn.onclick=()=>window.open('https://wa.me/?text='+encodeURIComponent(msg),'_blank');
+  btnRow.appendChild(copyBtn); btnRow.appendChild(waBtn);
+  card.appendChild(hdr); card.appendChild(preview); card.appendChild(btnRow);
+  modal.appendChild(card); document.body.appendChild(modal);
+  modal.addEventListener('click',e=>{if(e.target===modal)modal.remove();});
+}
+
+// ═══════════════════════════════════════
+// AWB TRACKER (Order tasks)
+// ═══════════════════════════════════════
+function editTaskAWB(orderIdx,taskName){
+  const o=orders[orderIdx]; if(!o) return;
+  if(!o.taskAWB) o.taskAWB={};
+  const current=o.taskAWB[taskName]||'';
+  const modal=document.createElement('div'); modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center';
+  const card=document.createElement('div'); card.style.cssText='background:#fff;border-radius:14px;padding:24px;width:420px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.18)';
+  card.innerHTML='<div style="font-size:15px;font-weight:700;margin-bottom:4px">📦 AWB / Tracking — '+esc(taskName)+'</div>'+
+    '<div style="font-size:12px;color:#888;margin-bottom:14px">'+esc(o.style.trim())+' '+esc(o.color.trim())+' · '+esc(o.buyer)+'</div>'+
+    '<label style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:5px">AWB / Tracking Number</label>'+
+    '<input id="tawbInput" class="s-input" style="width:100%;margin-bottom:8px" placeholder="e.g. SM123456789" value="'+esc(current)+'">'+
+    '<div style="font-size:11px;color:#888;margin-bottom:16px">Shree Maruti Courier</div>'+
+    '<div style="display:flex;gap:8px;justify-content:flex-end">'+
+      '<button id="tawbCancel" class="s-btn">Cancel</button>'+
+      '<button id="tawbWA" style="padding:8px 14px;border-radius:8px;border:none;background:#25D366;color:#fff;cursor:pointer;font-family:inherit;font-size:12px;font-weight:600">📱 WhatsApp</button>'+
+      '<button id="tawbSave" class="s-btn s-btn-p">Save</button>'+
+    '</div>';
+  modal.appendChild(card); document.body.appendChild(modal);
+  document.getElementById('tawbInput').focus();
+  document.getElementById('tawbCancel').onclick=()=>modal.remove();
+  modal.addEventListener('click',e=>{if(e.target===modal)modal.remove();});
+  document.getElementById('tawbSave').onclick=()=>{
+    const awb=document.getElementById('tawbInput').value.trim();
+    if(!awb){modal.remove();return;}
+    o.taskAWB[taskName]=awb; save();
+    if(syncEnabled) pushTask(o.flowId,taskName,o.tasks[taskName]||'').catch(()=>{});
+    modal.remove(); renderOrderKeepScroll();
+    addMsg('assistant','📦 AWB saved for '+taskName+'\n'+o.style.trim()+' '+o.color.trim()+': '+awb);
+  };
+  document.getElementById('tawbWA').onclick=()=>{
+    const awb=document.getElementById('tawbInput').value.trim();
+    if(awb){o.taskAWB[taskName]=awb;save();if(syncEnabled)pushTask(o.flowId,taskName,o.tasks[taskName]||'').catch(()=>{});}
+    modal.remove(); renderOrderKeepScroll();
+    const today=new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'long',year:'numeric'});
+    const label=taskName==='PP Sample Dispatch'?'PP Sample':'Shipment Sample';
+    const msg='Dear Team,\n\nPlease note that your *'+label+'* has been dispatched via *Shree Maruti Courier*.\n\n*Details:*\n• Style: *'+o.style.trim()+' — '+o.color.trim()+'*\n• Flow ID: #'+o.flowId+'\n• Buyer: *'+o.buyer+'*\n• Dispatch Date: *'+today+'*\n• Courier: *Shree Maruti Courier*\n'+(awb?'• AWB No.: *'+awb+'*\n':'')+'\nPlease confirm receipt.\n\nRegards,\nAsha Creations';
+    showWAModal(msg);
+  };
+  document.getElementById('tawbInput').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('tawbSave').click();});
+}
+
+function taskAWBWhatsApp(orderIdx,taskName){
+  const o=orders[orderIdx]; if(!o||!o.taskAWB||!o.taskAWB[taskName]){editTaskAWB(orderIdx,taskName);return;}
+  const awb=o.taskAWB[taskName];
+  const today=new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'long',year:'numeric'});
+  const label=taskName==='PP Sample Dispatch'?'PP Sample':'Shipment Sample';
+  const msg='Dear Team,\n\nYour *'+label+'* has been dispatched via *Shree Maruti Courier*.\n\n• Style: *'+o.style.trim()+' — '+o.color.trim()+'*\n• Flow ID: #'+o.flowId+'\n• Buyer: *'+o.buyer+'*\n• Date: *'+today+'*\n• AWB No.: *'+awb+'*\n\nPlease confirm receipt.\n\nRegards,\nAsha Creations';
+  showWAModal(msg);
+}
+
+// ═══════════════════════════════════════
+// SAMPLES AWB + WHATSAPP
+// ═══════════════════════════════════════
+function saveAWB(id,awb){
+  const s=samples.find(x=>x.id===id); if(!s||!awb.trim()) return;
+  s.awb=awb.trim();
+  if(s.status==='Pending Dispatch'){s.status='Dispatched';s.sent=true;if(!s.date)s.date=fmtNow().slice(0,10);}
+  saveSamples(); if(activeTab==='samples') renderSamples();
+  if(syncEnabled) sbUpsertSample(s).catch(()=>{});
+  addMsg('assistant','📦 AWB saved: '+s.awb+'\nStatus: Dispatched. Tap "Send to Buyer" to WhatsApp.');
+}
+
+function editAWB(id){
+  const s=samples.find(x=>x.id===id); if(!s) return;
+  const newAwb=prompt('Edit AWB / tracking number:',s.awb||''); if(newAwb===null) return;
+  s.awb=newAwb.trim(); saveSamples(); if(activeTab==='samples') renderSamples();
+  if(syncEnabled) sbUpsertSample(s).catch(()=>{});
+}
+
+function sendSampleWA(id){
+  const s=samples.find(x=>x.id===id); if(!s) return;
+  const dispatchDate=s.date||fmtNow().slice(0,10);
+  const formattedDate=new Date(dispatchDate).toLocaleDateString('en-IN',{day:'2-digit',month:'long',year:'numeric'});
+  const msg='Dear Team,\n\nPlease note that your *'+(s.type||'Sample')+'* has been dispatched via *Shree Maruti Courier*.\n\n*Details:*\n• Style: *'+(s.style||s.name)+'*\n'+(s.name!==s.style?'• Sample: *'+s.name+'*\n':'')+(s.qty?'• Quantity: *'+s.qty+' pcs*\n':'')+'• Dispatch Date: *'+formattedDate+'*\n• Courier: *Shree Maruti Courier*\n• AWB No.: *'+(s.awb||'—')+'*\n'+(s.notes?'• Notes: '+s.notes+'\n':'')+'\nPlease confirm receipt.\n\nRegards,\nAsha Creations';
+  const modal=document.createElement('div'); modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center';
+  const card=document.createElement('div'); card.style.cssText='background:#fff;border-radius:14px;padding:24px;width:500px;max-width:95vw;max-height:90vh;display:flex;flex-direction:column;gap:14px;box-shadow:0 20px 60px rgba(0,0,0,.2)';
+  const hdr=document.createElement('div'); hdr.style.cssText='display:flex;justify-content:space-between;align-items:center';
+  hdr.innerHTML='<div><div style="font-size:15px;font-weight:600">WhatsApp to Buyer</div><div style="font-size:11px;color:#888;margin-top:2px">'+s.name+' — AWB: '+(s.awb||'—')+'</div></div>';
+  const closeX=document.createElement('button'); closeX.textContent='✕'; closeX.style.cssText='background:none;border:none;font-size:18px;cursor:pointer;color:#888'; closeX.onclick=()=>modal.remove();
+  hdr.appendChild(closeX);
+  const preview=document.createElement('div'); preview.style.cssText='background:#e8f5e9;border-radius:10px;padding:14px;overflow-y:auto;max-height:320px;font-size:12px;white-space:pre-wrap;line-height:1.6;color:#1a1a18';
+  preview.textContent=msg;
+  const btnRow=document.createElement('div'); btnRow.style.cssText='display:flex;gap:8px';
+  const copyBtn=document.createElement('button'); copyBtn.textContent='📋 Copy'; copyBtn.style.cssText='flex:1;padding:10px;border-radius:8px;border:1px solid #ddd;background:#fff;cursor:pointer;font-size:13px;font-family:inherit';
+  copyBtn.onclick=()=>navigator.clipboard.writeText(msg).then(()=>{copyBtn.textContent='✅ Copied!';setTimeout(()=>copyBtn.textContent='📋 Copy',2000);});
+  const waBtn=document.createElement('button'); waBtn.innerHTML='📱 Open WhatsApp'; waBtn.style.cssText='flex:1;padding:10px;border-radius:8px;border:none;background:#25d366;color:#fff;cursor:pointer;font-size:13px;font-weight:600;font-family:inherit';
+  waBtn.onclick=()=>window.open('https://wa.me/?text='+encodeURIComponent(msg),'_blank');
+  btnRow.appendChild(copyBtn); btnRow.appendChild(waBtn);
+  card.appendChild(hdr); card.appendChild(preview); card.appendChild(btnRow);
+  modal.appendChild(card); document.body.appendChild(modal);
+  modal.addEventListener('click',e=>{if(e.target===modal)modal.remove();});
+}
+
+// ═══════════════════════════════════════
+// SAMPLE DETAIL + EDIT + PHOTO
+// ═══════════════════════════════════════
+function showSampleDetail(id){
+  const s=samples.find(x=>x.id===id); if(!s){console.log('Sample not found:',id);return;}
+  const existing=document.getElementById('sampleDetailModal'); if(existing) existing.remove();
+  const ST={'Pending Dispatch':'background:#fff8e1;color:#b45309;border:1px solid #f5c842','Dispatched':'background:#e0f2fe;color:#0369a1;border:1px solid #7dd3fc','Received by Buyer':'background:#f3e8ff;color:#7e22ce;border:1px solid #d8b4fe','Approved':'background:#f0fdf4;color:#166534;border:1px solid #86efac','Revision Required':'background:#fff7ed;color:#9a3412;border:1px solid #fdba74','Rejected':'background:#fef2f2;color:#991b1b;border:1px solid #fca5a5'};
+  const overlay=document.createElement('div'); overlay.id='sampleDetailModal';
+  overlay.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+  overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.remove();});
+  const box=document.createElement('div'); box.style.cssText='background:#fff;border-radius:16px;width:520px;max-width:100%;max-height:85vh;overflow-y:auto;box-shadow:0 25px 60px rgba(0,0,0,.25)';
+  box.addEventListener('click',e=>e.stopPropagation());
+  box.innerHTML='<div style="background:#1C1917;border-radius:16px 16px 0 0;padding:18px 20px;display:flex;justify-content:space-between;align-items:flex-start">'+
+    '<div><div style="font-size:18px;font-weight:700;color:#fff;margin-bottom:4px">'+esc(s.name)+'</div><div style="font-size:12px;color:rgba(255,255,255,.45)">'+esc(s.type||'—')+' · '+esc(s.buyer||'—')+' · Style: '+esc(s.style||'—')+'</div></div>'+
+    '<button onclick="document.getElementById(\'sampleDetailModal\').remove()" style="background:rgba(255,255,255,.12);border:none;color:#fff;border-radius:8px;width:32px;height:32px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center">✕</button></div>';
+  const body=document.createElement('div'); body.style.cssText='padding:20px;display:flex;flex-direction:column;gap:14px';
+  const statusRow=document.createElement('div'); statusRow.style.cssText='display:flex;gap:8px;flex-wrap:wrap;align-items:center';
+  statusRow.innerHTML='<span style="font-size:12px;font-weight:700;padding:5px 14px;border-radius:20px;'+(ST[s.status]||'background:#f0f0ec;color:#555')+'">'+esc(s.status)+'</span>'+(s.sent?'<span style="font-size:12px;padding:5px 14px;border-radius:20px;background:#f0fdf4;color:#166534;border:1px solid #86efac;font-weight:600">✓ Dispatched to Buyer</span>':'<span style="font-size:12px;padding:5px 14px;border-radius:20px;background:#fff8e1;color:#b45309;border:1px dashed #deb96a">⏳ Not Dispatched</span>');
+  body.appendChild(statusRow);
+  const topRow=document.createElement('div'); topRow.style.cssText='display:flex;gap:14px;align-items:flex-start';
+  if(s.photo){const iw=document.createElement('div');iw.style.cssText='flex-shrink:0;cursor:pointer';iw.onclick=()=>showPhotoFull(id);const img=document.createElement('img');img.src=s.photo;img.style.cssText='width:100px;height:100px;object-fit:cover;border-radius:10px;border:2px solid #e8e4de;display:block';const lbl=document.createElement('div');lbl.style.cssText='font-size:9px;color:#aaa;text-align:center;margin-top:3px';lbl.textContent='Tap to enlarge';iw.appendChild(img);iw.appendChild(lbl);topRow.appendChild(iw);}
+  const grid=document.createElement('div'); grid.style.cssText='flex:1;display:grid;grid-template-columns:1fr 1fr;gap:7px';
+  [['Type',s.type],['Style',s.style],['Buyer',s.buyer],['Qty',(s.qty||0)+' pcs'],['Date',s.date||'—'],['Status',s.status]].forEach(([l,v])=>{const c=document.createElement('div');c.style.cssText='background:#f8f7f5;border-radius:8px;padding:8px 10px';c.innerHTML='<div style="font-size:9px;font-weight:700;color:#aaa;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">'+l+'</div><div style="font-size:13px;font-weight:600;color:#1C1917">'+esc(String(v||'—'))+'</div>';grid.appendChild(c);});
+  topRow.appendChild(grid); body.appendChild(topRow);
+  const awbBox=document.createElement('div'); awbBox.style.cssText='background:linear-gradient(135deg,#FDF8EC,#FFFBF0);border:1.5px solid #DFC98A;border-radius:10px;padding:14px 16px';
+  awbBox.innerHTML='<div style="font-size:10px;font-weight:700;color:#9A7A2E;letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px">📦 Courier Details</div><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px"><div><div style="font-size:11px;color:#888;margin-bottom:2px">Courier</div><div style="font-size:14px;font-weight:700;color:#1C1917">Shree Maruti Courier</div></div><div style="text-align:right"><div style="font-size:11px;color:#888;margin-bottom:2px">AWB / Tracking No.</div>'+(s.awb?'<div style="font-size:18px;font-weight:700;color:#C9A84C;letter-spacing:.05em">'+esc(s.awb)+'</div>':'<div style="font-size:13px;color:#bbb;font-style:italic">Not added yet</div>')+'</div></div>';
+  body.appendChild(awbBox);
+  if(s.notes){const nb=document.createElement('div');nb.style.cssText='background:#f8f7f5;border-radius:10px;padding:12px 14px';nb.innerHTML='<div style="font-size:10px;font-weight:700;color:#aaa;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px">Notes</div><div style="font-size:13px;color:#444;line-height:1.55">'+esc(s.notes)+'</div>';body.appendChild(nb);}
+  const btnRow=document.createElement('div'); btnRow.style.cssText='display:flex;gap:8px;flex-wrap:wrap;padding-top:4px';
+  const waBtn=document.createElement('button'); waBtn.style.cssText='flex:1;padding:11px 16px;border-radius:8px;border:none;background:#25D366;color:#fff;cursor:pointer;font-family:inherit;font-size:13px;font-weight:700;min-width:160px';waBtn.textContent='📱 Send WhatsApp';waBtn.onclick=()=>{overlay.remove();sendSampleWA(id);};
+  const editBtn=document.createElement('button'); editBtn.style.cssText='padding:11px 16px;border-radius:8px;border:1.5px solid #e4e0da;background:#fff;cursor:pointer;font-family:inherit;font-size:13px;color:#555';editBtn.textContent='✏️ Edit';editBtn.onclick=()=>{overlay.remove();editSample(id);};
+  btnRow.appendChild(waBtn); btnRow.appendChild(editBtn); body.appendChild(btnRow);
+  box.appendChild(body); overlay.appendChild(box); document.body.appendChild(overlay);
+}
+
+function editSample(id){
+  const s=samples.find(x=>x.id===id); if(!s) return;
+  const modal=document.createElement('div'); modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center';
+  const card=document.createElement('div'); card.style.cssText='background:#fff;border-radius:14px;padding:24px;width:520px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.18)';
+  card.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><h2 style="font-size:15px;font-weight:700">Edit Sample</h2><button id="esClose" style="background:none;border:none;font-size:18px;cursor:pointer;color:#888">✕</button></div>'+
+    '<div style="margin-bottom:14px"><label class="s-label">Sample Photo</label><div id="esPhotoWrap" style="display:flex;align-items:center;gap:10px;margin-top:4px">'+(s.photo?'<img src="'+s.photo+'" style="width:60px;height:60px;object-fit:cover;border-radius:8px;border:1.5px solid var(--border)">':'<div style="width:60px;height:60px;border-radius:8px;border:2px dashed var(--border);display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:20px">📷</div>')+'<div><input type="file" id="es-photo" accept="image/*" style="display:none" onchange="previewSamplePhoto(this)"><button onclick="document.getElementById(\'es-photo\').click()" style="font-size:12px;padding:6px 12px;border-radius:6px;border:1.5px solid var(--border);background:var(--surface2);cursor:pointer;font-family:inherit">📷 Upload Photo</button><div style="font-size:10px;color:var(--text3);margin-top:4px">Photo of sample for reference</div></div></div></div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'+
+    '<div><label class="s-label">Name</label><input id="es-name" class="s-input" value="'+esc(s.name)+'"></div>'+
+    '<div><label class="s-label">Style</label><input id="es-style" class="s-input" value="'+esc(s.style||'')+'"></div>'+
+    '<div><label class="s-label">Type</label><select id="es-type" class="s-input">'+['Development Sample','Fit Sample','PP Sample','Shipment Sample','Counter Sample','Photo Sample','Salesman Sample'].map(t=>'<option '+(s.type===t?'selected':'')+'>'+t+'</option>').join('')+'</select></div>'+
+    '<div><label class="s-label">Buyer</label><input id="es-buyer" class="s-input" value="'+esc(s.buyer||'')+'"></div>'+
+    '<div><label class="s-label">Qty (pcs)</label><input id="es-qty" class="s-input" type="number" value="'+(s.qty||0)+'"></div>'+
+    '<div><label class="s-label">AWB / Tracking</label><input id="es-awb" class="s-input" value="'+esc(s.awb||'')+'"></div>'+
+    '<div><label class="s-label">Dispatch Date</label><input id="es-date" class="s-input" type="date" value="'+(s.date||'').slice(0,10)+'"></div>'+
+    '<div><label class="s-label">Status</label><select id="es-status" class="s-input">'+['Pending Dispatch','Dispatched','Received by Buyer','Approved','Revision Required','Rejected'].map(st=>'<option '+(s.status===st?'selected':'')+'>'+st+'</option>').join('')+'</select></div>'+
+    '</div>'+
+    '<div><label class="s-label">Notes</label><input id="es-notes" class="s-input" style="width:100%" value="'+esc(s.notes||'')+'"></div>'+
+    '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px"><button id="esCancel" class="s-btn">Cancel</button><button id="esSave" class="s-btn s-btn-p">Save Changes</button></div>';
+  modal.appendChild(card); document.body.appendChild(modal);
+  document.getElementById('esClose').onclick=()=>modal.remove();
+  document.getElementById('esCancel').onclick=()=>modal.remove();
+  modal.addEventListener('click',e=>{if(e.target===modal)modal.remove();});
+  document.getElementById('esSave').onclick=()=>{
+    s.name=document.getElementById('es-name').value.trim();
+    s.style=document.getElementById('es-style').value.trim();
+    s.type=document.getElementById('es-type').value;
+    s.buyer=document.getElementById('es-buyer').value.trim();
+    s.qty=parseInt(document.getElementById('es-qty').value)||0;
+    s.awb=document.getElementById('es-awb').value.trim();
+    s.date=document.getElementById('es-date').value;
+    s.status=document.getElementById('es-status').value;
+    s.notes=document.getElementById('es-notes').value.trim();
+    s.sent=!['Pending Dispatch'].includes(s.status);
+    const photoInput=document.getElementById('es-photo');
+    if(photoInput&&photoInput._newPhoto) s.photo=photoInput._newPhoto;
+    saveSamples(); if(activeTab==='samples') renderSamples();
+    if(syncEnabled) sbUpsertSample(s).catch(()=>{});
+    modal.remove();
+    addMsg('assistant','✅ Sample updated: '+s.name+(s.awb?' · AWB: '+s.awb:'')+(s.photo?' · 📷 Photo saved':''));
+  };
+}
+
+function previewSamplePhoto(input){
+  const file=input.files[0]; if(!file) return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    const img=new Image();
+    img.onload=()=>{
+      const canvas=document.createElement('canvas');
+      const maxSize=400; let w=img.width,h=img.height;
+      if(w>h){if(w>maxSize){h=h*(maxSize/w);w=maxSize;}}else{if(h>maxSize){w=w*(maxSize/h);h=maxSize;}}
+      canvas.width=w;canvas.height=h;
+      canvas.getContext('2d').drawImage(img,0,0,w,h);
+      const dataUrl=canvas.toDataURL('image/jpeg',0.7);
+      input._newPhoto=dataUrl;
+      const wrap=document.getElementById('esPhotoWrap');
+      if(wrap){const existing=wrap.querySelector('img');if(existing)existing.src=dataUrl;else{const preview=document.createElement('img');preview.style.cssText='width:60px;height:60px;object-fit:cover;border-radius:8px;border:1.5px solid var(--border)';preview.src=dataUrl;wrap.insertBefore(preview,wrap.firstChild);const placeholder=wrap.querySelector('div[style*="dashed"]');if(placeholder)placeholder.remove();}}
+    };
+    img.src=e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function showPhotoFull(id){
+  const s=samples.find(x=>x.id===id); if(!s||!s.photo) return;
+  const modal=document.createElement('div'); modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:2000;display:flex;align-items:center;justify-content:center;cursor:pointer';
+  modal.onclick=()=>modal.remove();
+  const img=document.createElement('img'); img.src=s.photo; img.style.cssText='max-width:90vw;max-height:90vh;object-fit:contain;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.5)';
+  const label=document.createElement('div'); label.style.cssText='position:absolute;bottom:20px;color:#fff;font-size:13px;text-align:center;background:rgba(0,0,0,.5);padding:6px 16px;border-radius:20px';
+  label.textContent=s.name+(s.type?' · '+s.type:'');
+  modal.appendChild(img); modal.appendChild(label); document.body.appendChild(modal);
+}
+
+// ═══════════════════════════════════════
+// ORDER EDIT + ADD
+// ═══════════════════════════════════════
+function showEditOrder(idx){
+  const o=orders[idx]; if(!o) return;
+  const modal=document.createElement('div'); modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center';
+  const card=document.createElement('div'); card.style.cssText='background:#fff;border-radius:14px;padding:24px;width:560px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.18)';
+  card.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><h2 style="font-size:15px;font-weight:700">Edit Order — '+esc(o.style)+' '+esc(o.color)+'</h2><button id="editClose" style="background:none;border:none;font-size:18px;cursor:pointer;color:#888">✕</button></div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'+
+    '<div><label class="s-label">Style</label><input id="eo-style" class="s-input" value="'+esc(o.style)+'"></div>'+
+    '<div><label class="s-label">Color</label><input id="eo-color" class="s-input" value="'+esc(o.color)+'"></div>'+
+    '<div><label class="s-label">Product</label><input id="eo-product" class="s-input" value="'+esc(o.product||'')+'"></div>'+
+    '<div><label class="s-label">Buyer</label><select id="eo-buyer" class="s-input">'+['OWND','MUFTI','COBB','STYLI WOMEN GCC','STYLI MEN GCC','STYLI WOMEN B2B','RARE & BASIC WOMEN','RARE & BASIC MEN','SO WHATT','Other'].map(b=>'<option '+(o.buyer===b?'selected':'')+'>'+b+'</option>').join('')+'</select></div>'+
+    '<div><label class="s-label">Order Qty (pcs)</label><input id="eo-qty" class="s-input" type="number" value="'+(o.qty||0)+'"></div>'+
+    '<div><label class="s-label">Season</label><input id="eo-season" class="s-input" value="'+esc(o.season||'')+'"></div>'+
+    '<div><label class="s-label">Internal PO</label><input id="eo-po" class="s-input" value="'+esc(o.po||'')+'"></div>'+
+    '<div><label class="s-label">Order Date</label><input id="eo-odate" class="s-input" type="date" value="'+(o.orderDate||'').slice(0,10)+'"></div>'+
+    '<div><label class="s-label">Ex-Factory Date</label><input id="eo-ef" class="s-input" type="date" value="'+(o.exFactory||'').slice(0,10)+'"></div>'+
+    '<div><label class="s-label">Merchant</label><input id="eo-merchant" class="s-input" value="'+esc(o.merchant||'')+'"></div>'+
+    '</div>'+
+    '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px"><button id="editCancel" class="s-btn">Cancel</button><button id="editSave" class="s-btn s-btn-p">Save Changes</button></div>';
+  modal.appendChild(card); document.body.appendChild(modal);
+  document.getElementById('editClose').onclick=()=>modal.remove();
+  document.getElementById('editCancel').onclick=()=>modal.remove();
+  modal.addEventListener('click',e=>{if(e.target===modal)modal.remove();});
+  document.getElementById('editSave').onclick=()=>{
+    o.style=document.getElementById('eo-style').value.trim();
+    o.color=document.getElementById('eo-color').value.trim();
+    o.product=document.getElementById('eo-product').value.trim();
+    o.buyer=document.getElementById('eo-buyer').value;
+    o.qty=parseInt(document.getElementById('eo-qty').value)||0;
+    o.season=document.getElementById('eo-season').value.trim();
+    o.po=document.getElementById('eo-po').value.trim();
+    o.orderDate=document.getElementById('eo-odate').value;
+    o.exFactory=document.getElementById('eo-ef').value;
+    o.deadline=o.exFactory;
+    o.merchant=document.getElementById('eo-merchant').value.trim();
+    save(); renderOrder(); renderList(); modal.remove();
+    if(syncEnabled) sbUpsertOrder(o).catch(()=>{});
+    addMsg('assistant','✅ Order updated: '+o.style+' '+o.color);
+  };
+}
+
+function showAddOrderPanel(){
+  const panel=document.getElementById('mainPanel');
+  if(activeTab!=='orders') switchTab('orders');
+  panel.innerHTML='<div class="main-header" style="flex-shrink:0"><div style="display:flex;justify-content:space-between;align-items:center"><h2>Add New Order</h2><button onclick="renderOrder()" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:13px;font-family:inherit">← Cancel</button></div><p>Fill in the details — all 26 tasks will be created automatically</p></div>'+
+    '<div class="tasks-scroll"><div style="background:var(--white);border:1.5px solid var(--border);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow)">'+
+    '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:12px">'+
+    '<div><label class="s-label">Style Name *</label><input id="ao-style" class="s-input" placeholder="e.g. NOVA"></div>'+
+    '<div><label class="s-label">Color *</label><input id="ao-color" class="s-input" placeholder="e.g. Navy Blue"></div>'+
+    '<div><label class="s-label">Product *</label><input id="ao-product" class="s-input" placeholder="e.g. POLO TSHIRT"></div>'+
+    '<div><label class="s-label">Buyer *</label><select id="ao-buyer" class="s-input"><option value="">Select buyer...</option><option>OWND</option><option>MUFTI</option><option>COBB</option><option>STYLI WOMEN GCC</option><option>STYLI MEN GCC</option><option>STYLI WOMEN B2B</option><option>RARE & BASIC WOMEN</option><option>RARE & BASIC MEN</option><option>SO WHATT</option><option>Other</option></select></div>'+
+    '<div><label class="s-label">Season</label><input id="ao-season" class="s-input" placeholder="e.g. SS26"></div>'+
+    '<div><label class="s-label">Order Qty (pcs)</label><input id="ao-qty" class="s-input" type="number" placeholder="e.g. 1200"></div>'+
+    '<div><label class="s-label">Internal PO</label><input id="ao-po" class="s-input" placeholder="e.g. 12345678"></div>'+
+    '<div><label class="s-label">Order Date *</label><input id="ao-odate" class="s-input" type="date"></div>'+
+    '<div><label class="s-label">Ex-Factory Date</label><input id="ao-ef" class="s-input" type="date"></div>'+
+    '<div><label class="s-label">Merchant</label><input id="ao-merchant" class="s-input" placeholder="e.g. Tejveer Kaur"></div>'+
+    '</div>'+
+    '<div style="display:flex;gap:10px;justify-content:flex-end"><button onclick="renderOrder()" class="s-btn">Cancel</button><button onclick="submitNewOrder()" class="s-btn s-btn-p">Save Order</button></div></div></div>';
+  const today=new Date().toISOString().slice(0,10);
+  document.getElementById('ao-odate').value=today;
+}
+
+function submitNewOrder(){
+  const style=(document.getElementById('ao-style').value||'').trim();
+  const color=(document.getElementById('ao-color').value||'').trim();
+  const buyer=document.getElementById('ao-buyer').value;
+  const odate=document.getElementById('ao-odate').value;
+  if(!style||!color||!buyer||!odate){alert('Please fill in: Style, Color, Buyer and Order Date');return;}
+  const ef=document.getElementById('ao-ef').value;
+  const tasks={};
+  TASK_COLS.forEach(t=>tasks[t]=t==='Ex-Factory'?(ef||null):null);
+  const ids=orders.map(o=>parseInt(o.flowId)).filter(n=>!isNaN(n));
+  const newId=String(Math.max(...ids,1000)+1);
+  const newOrder={flowId:newId,po:(document.getElementById('ao-po').value||'TBD').trim(),style,color,product:(document.getElementById('ao-product').value||'').trim(),buyer,season:(document.getElementById('ao-season').value||'').trim(),qty:parseInt(document.getElementById('ao-qty').value)||0,deadline:ef,exFactory:ef,orderDate:odate,merchant:(document.getElementById('ao-merchant').value||'').trim(),remarks:'',tasks};
+  orders.unshift(newOrder); selectedIdx=0; save(); renderList(); renderOrder();
+  if(syncEnabled) sbUpsertOrder(newOrder).catch(()=>{});
+  addMsg('assistant','✅ Order added! Flow #'+newId+' — '+style+' '+color+'\n\nClick 📅 Auto TNA to fill all planned dates automatically.');
+}
+
+// ═══════════════════════════════════════
+// DELAY REASON MODAL
+// ═══════════════════════════════════════
+const DELAY_REASONS=['Fabric delay from mill','Trims / accessories delay','Buyer approval pending','Fit correction required','Lab / testing delay','Factory capacity issue','Public holiday','Payment hold','Design change by buyer','Other'];
+
+function askDelayReason(taskName,daysLate,callback){
+  const modal=document.createElement('div'); modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1001;display:flex;align-items:center;justify-content:center';
+  const card=document.createElement('div'); card.style.cssText='background:#fff;border-radius:14px;padding:24px;width:420px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.18)';
+  const header=document.createElement('div');
+  header.innerHTML='<div style="font-size:15px;font-weight:700;margin-bottom:4px">⚠️ Task Completed Late</div><div style="font-size:12px;color:#888;margin-bottom:16px"><strong>'+esc(taskName)+'</strong> — '+daysLate+' days behind schedule</div><div style="font-size:12px;font-weight:600;color:#555;margin-bottom:8px">Why was this delayed?</div>';
+  const reasonsDiv=document.createElement('div'); reasonsDiv.style.cssText='display:flex;flex-direction:column;gap:6px;margin-bottom:14px';
+  let selectedReason='';
+  DELAY_REASONS.forEach(r=>{
+    const btn=document.createElement('button'); btn.textContent=r; btn.style.cssText='padding:8px 12px;border-radius:8px;border:1.5px solid #e4e4e0;background:#fff;cursor:pointer;font-family:inherit;font-size:12px;text-align:left;transition:all .15s';
+    btn.onclick=()=>{reasonsDiv.querySelectorAll('button').forEach(b=>{b.style.background='#fff';b.style.borderColor='#e4e4e0';b.style.color='#1a1a18';});btn.style.background='#f0f9f5';btn.style.borderColor='#52B788';btn.style.color='#166634';selectedReason=r;};
+    reasonsDiv.appendChild(btn);
+  });
+  const noteLabel=document.createElement('div'); noteLabel.textContent='Additional notes (optional)'; noteLabel.style.cssText='font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px';
+  const noteInput=document.createElement('textarea'); noteInput.style.cssText='width:100%;padding:8px 10px;border:1.5px solid #e4e4e0;border-radius:8px;font-family:inherit;font-size:12px;outline:none;resize:none;height:56px;margin-bottom:14px';noteInput.placeholder='E.g. Mill delayed due to yarn shortage...';
+  const btnRow=document.createElement('div'); btnRow.style.cssText='display:flex;gap:8px';
+  const skipBtn=document.createElement('button'); skipBtn.textContent='Skip'; skipBtn.style.cssText='flex:1;padding:9px;border-radius:8px;border:1.5px solid #e4e4e0;background:#fff;cursor:pointer;font-family:inherit;font-size:13px';skipBtn.onclick=()=>{modal.remove();callback('');};
+  const saveBtn=document.createElement('button'); saveBtn.textContent='Save Reason'; saveBtn.style.cssText='flex:2;padding:9px;border-radius:8px;border:none;background:#1C1917;color:#fff;cursor:pointer;font-family:inherit;font-size:13px;font-weight:600';saveBtn.onclick=()=>{const note=noteInput.value.trim();const final=selectedReason+(note?' — '+note:'');modal.remove();callback(final||note||'');};
+  btnRow.appendChild(skipBtn);btnRow.appendChild(saveBtn);
+  card.appendChild(header);card.appendChild(reasonsDiv);card.appendChild(noteLabel);card.appendChild(noteInput);card.appendChild(btnRow);
+  modal.appendChild(card);document.body.appendChild(modal);
+}
+
+// ═══════════════════════════════════════
+// CELEBRATION
+// ═══════════════════════════════════════
+const BALLOON_EMOJIS=['🎈','🎈','🎉','🎊','🎈','🥳','🎈'];
+const CONFETTI_COLORS=['#C9A84C','#E8CC7A','#52B788','#4A90D9','#F4845F','#a855f7','#db2777','#f59e0b'];
+function celebrate(orderName){
+  try{
+    const ctx=new (window.AudioContext||window.webkitAudioContext)();
+    function clap(){const buf=ctx.createBuffer(1,ctx.sampleRate*.15,ctx.sampleRate);const data=buf.getChannelData(0);for(let i=0;i<data.length;i++)data[i]=(Math.random()*2-1)*Math.exp(-i/(ctx.sampleRate*.04));const src=ctx.createBufferSource();src.buffer=buf;const gain=ctx.createGain();gain.gain.setValueAtTime(.4,ctx.currentTime);gain.gain.exponentialRampToValueAtTime(.001,ctx.currentTime+.15);src.connect(gain);gain.connect(ctx.destination);src.start();}
+    [0,.3,.6,.9,1.2,1.5,1.8].forEach(t=>setTimeout(clap,t*1000));
+  }catch(e){}
+  const container=document.createElement('div');container.style.cssText='position:fixed;inset:0;pointer-events:none;z-index:9990;overflow:hidden';document.body.appendChild(container);
+  for(let i=0;i<120;i++){const piece=document.createElement('div');piece.style.cssText='position:absolute;top:-20px;opacity:0;left:'+Math.random()*100+'vw;background:'+CONFETTI_COLORS[Math.floor(Math.random()*CONFETTI_COLORS.length)]+';width:'+(6+Math.random()*10)+'px;height:'+(8+Math.random()*12)+'px;border-radius:'+(Math.random()>.5?'50%':'2px')+';animation:confettiFall '+(2+Math.random()*3)+'s linear '+(Math.random()*1.5)+'s forwards';container.appendChild(piece);}
+  setTimeout(()=>container.remove(),6000);
+  for(let i=0;i<8;i++){setTimeout(()=>{const b=document.createElement('div');b.style.cssText='position:fixed;bottom:-120px;font-size:'+(36+Math.random()*24)+'px;left:'+(5+Math.random()*90)+'vw;animation:balloonRise '+(3+Math.random()*2)+'s ease-in forwards;pointer-events:none;z-index:9991';b.textContent=BALLOON_EMOJIS[Math.floor(Math.random()*BALLOON_EMOJIS.length)];document.body.appendChild(b);setTimeout(()=>b.remove(),6000);},i*300);}
+  const banner=document.createElement('div');banner.style.cssText='position:fixed;bottom:30px;left:50%;transform:translateX(-50%) translateY(100px);background:linear-gradient(135deg,#C9A84C,#E8CC7A,#9A7A2E);color:#1C1917;padding:16px 32px;border-radius:50px;font-size:15px;font-weight:700;letter-spacing:.05em;box-shadow:0 8px 32px rgba(201,168,76,.5);z-index:9992;pointer-events:none;white-space:nowrap;opacity:0;transition:all .5s cubic-bezier(.175,.885,.32,1.275)';
+  banner.innerHTML='🎉 Order Completed Early! · '+orderName+' 🏆';
+  document.body.appendChild(banner);setTimeout(()=>banner.style.cssText+=';opacity:1;transform:translateX(-50%) translateY(0)',100);
+  setTimeout(()=>{banner.style.opacity='0';banner.style.transform='translateX(-50%) translateY(100px)';setTimeout(()=>banner.remove(),600);},4500);
+}
+
+// ═══════════════════════════════════════
+// HOMEPAGE
+// ═══════════════════════════════════════
+function showHomepage(){
+  const hp=document.getElementById('homepage'); if(!hp) return;
+  const active=orders.filter(o=>!(o.tasks&&o.tasks['Order Completed']));
+  const taskCols26=TASK_COLS.filter(t=>t!=='Order Completed');
+  const done=active.reduce((a,o)=>a+taskCols26.filter(t=>o.tasks&&o.tasks[t]&&!String(o.tasks[t]).includes('(planned)')).length,0);
+  const el1=document.getElementById('hpOrders');const el2=document.getElementById('hpTasks');const el3=document.getElementById('hpSamples');
+  if(el1)el1.textContent=active.length;if(el2)el2.textContent=done;if(el3)el3.textContent=samples.length;
+  hp.classList.add('show');
+}
+function hideHomepage(){
+  const hp=document.getElementById('homepage');
+  if(hp){hp.style.opacity='0';setTimeout(()=>{hp.classList.remove('show');hp.style.opacity='';},400);}
 }
 
 

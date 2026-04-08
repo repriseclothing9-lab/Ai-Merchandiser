@@ -1634,23 +1634,38 @@ async function sbInit(){
     clearTimeout(timeout);
 
     if(rows && rows.length > 0){
-      // Preserve local Order Completed and photos during merge
+      // Merge Supabase rows with local
       const localById = {};
       orders.forEach(o => localById[o.flowId] = o);
+      const sbById = {};
+      rows.forEach(r => sbById[r.flow_id] = r);
 
       orders = rows.map(r => {
         const o = rowToOrder(r);
         const local = localById[o.flowId];
         if(local){
-          // Keep local Order Completed if sheet doesn't have it
           if(local.tasks['Order Completed'] && !o.tasks['Order Completed'])
             o.tasks['Order Completed'] = local.tasks['Order Completed'];
-          // Keep local taskAWB
           if(local.taskAWB && Object.keys(local.taskAWB).length)
             o.taskAWB = {...o.taskAWB, ...local.taskAWB};
         }
         return o;
       });
+
+      // Push any ORDERS_DATA entries missing from Supabase
+      const missingOrders = ORDERS_DATA.filter(od => !sbById[od.flowId]);
+      if(missingOrders.length > 0){
+        setSyncUI('Syncing '+missingOrders.length+' missing orders...', false, true);
+        for(const od of missingOrders){
+          try{
+            const full = {...od, tasks: od.tasks||{}, taskAWB: {}, remarks: '', delayReasons: {}};
+            TASK_COLS.forEach(t=>{ if(full.tasks[t]===undefined) full.tasks[t]=null; });
+            await sbUpsertOrder(full);
+            orders.push(full);
+          } catch(e){ console.warn('Failed to push order:', od.flowId, e.message); }
+        }
+        addMsg('assistant', '✅ Synced '+missingOrders.length+' missing orders to Supabase.');
+      }
     } else {
       // Empty DB — use ORDERS_DATA as source and push to Supabase
       setSyncUI('First time setup — pushing orders to Supabase...', false, true);

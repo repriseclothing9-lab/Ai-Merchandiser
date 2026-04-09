@@ -1652,19 +1652,47 @@ async function sbInit(){
         return o;
       });
 
-      // Push any ORDERS_DATA entries missing from Supabase
-      const missingOrders = ORDERS_DATA.filter(od => !sbById[od.flowId]);
-      if(missingOrders.length > 0){
-        setSyncUI('Syncing '+missingOrders.length+' missing orders...', false, true);
-        for(const od of missingOrders){
+      // Push ALL local orders to Supabase (preserves task completions)
+      // Local orders (from localStorage) have completed tasks — ORDERS_DATA does not
+      const allLocalOrders = (() => {
+        try {
+          const saved = localStorage.getItem(STORAGE_KEY);
+          if(saved){ const p = JSON.parse(saved); if(p && p.length > 0) return p; }
+        } catch(e){}
+        return ORDERS_DATA; // fallback only if no local data
+      })();
+
+      // Find orders missing from Supabase
+      const missingOrders = allLocalOrders.filter(od => !sbById[od.flowId]);
+      // Also find orders where local has MORE task completions than Supabase
+      const staleOrders = orders.filter(sbO => {
+        const localO = allLocalOrders.find(l => l.flowId === sbO.flowId);
+        if(!localO || !localO.tasks) return false;
+        const sbDone = TASK_COLS.filter(t => sbO.tasks[t] && !String(sbO.tasks[t]).includes('(planned)')).length;
+        const localDone = TASK_COLS.filter(t => localO.tasks[t] && !String(localO.tasks[t]).includes('(planned)')).length;
+        return localDone > sbDone; // local has more completions
+      });
+
+      const toSync = [...missingOrders, ...staleOrders.map(o => allLocalOrders.find(l=>l.flowId===o.flowId)).filter(Boolean)];
+      const uniqueToSync = [...new Map(toSync.map(o=>[o.flowId,o])).values()];
+
+      if(uniqueToSync.length > 0){
+        setSyncUI('Restoring '+uniqueToSync.length+' orders with task data...', false, true);
+        for(const od of uniqueToSync){
           try{
-            const full = {...od, tasks: od.tasks||{}, taskAWB: {}, remarks: '', delayReasons: {}};
+            const full = {...od, tasks: od.tasks||{}, taskAWB: od.taskAWB||{}, remarks: od.remarks||'', delayReasons: od.delayReasons||{}};
             TASK_COLS.forEach(t=>{ if(full.tasks[t]===undefined) full.tasks[t]=null; });
             await sbUpsertOrder(full);
-            orders.push(full);
-          } catch(e){ console.warn('Failed to push order:', od.flowId, e.message); }
+            // Update in orders array too
+            const idx2 = orders.findIndex(o=>o.flowId===full.flowId);
+            if(idx2>=0) orders[idx2] = rowToOrder({flow_id:full.flowId,po:full.po,style:full.style,color:full.color,product:full.product,buyer:full.buyer,season:full.season,qty:full.qty,deadline:full.deadline,ex_factory:full.exFactory,order_date:full.orderDate,merchant:full.merchant,tasks:full.tasks,task_awb:full.taskAWB,remarks:full.remarks,delay_reasons:full.delayReasons});
+            else orders.push(full);
+          } catch(e){ console.warn('Failed to sync order:', od.flowId, e.message); }
         }
-        addMsg('assistant', '✅ Synced '+missingOrders.length+' missing orders to Supabase.');
+        const missingCount = missingOrders.length;
+        const staleCount = staleOrders.length;
+        const restoreMsg = '✅ Restored all order data! '+(missingCount>0?missingCount+' missing orders added. ':'')+( staleCount>0?staleCount+' orders updated with task completions.':'');
+        addMsg('assistant', restoreMsg);
       }
     } else {
       // Empty DB — use ORDERS_DATA as source and push to Supabase

@@ -495,6 +495,27 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
   .hp-logo-wrap { width: 150px; height: 150px; }
   .hp-logo-img { width: 120px; height: 120px; }
 }
+
+#loginScreen{position:fixed;inset:0;background:#1C1917;z-index:10000;display:flex;align-items:center;justify-content:center}
+.login-card{background:#fff;border-radius:20px;padding:36px 32px;width:340px;max-width:92vw;display:flex;flex-direction:column;gap:16px;box-shadow:0 24px 64px rgba(0,0,0,.4)}
+.login-title{font-size:20px;font-weight:700;color:#1C1917;text-align:center}
+.login-sub{font-size:12px;color:#888;text-align:center;margin-top:-8px}
+.login-roles{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.role-btn{padding:14px 10px;border-radius:12px;border:2px solid #e4e0da;background:#fff;cursor:pointer;font-family:inherit;text-align:center;transition:all .15s}
+.role-btn.selected{border-color:#C9A84C;background:#FDF8EC}
+.role-icon{font-size:22px;margin-bottom:3px}
+.role-name{font-size:13px;font-weight:700;color:#1C1917}
+.role-desc{font-size:10px;color:#888;margin-top:1px}
+.login-pin-label{font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.06em}
+.login-pin{width:100%;padding:12px 14px;border-radius:10px;border:2px solid #e4e0da;font-size:22px;letter-spacing:.4em;text-align:center;font-family:inherit;outline:none;box-sizing:border-box}
+.login-pin:focus{border-color:#C9A84C}
+.login-error{font-size:12px;color:#e53e3e;text-align:center;min-height:14px}
+.login-submit{padding:13px;border-radius:10px;border:none;background:#1C1917;color:#fff;font-family:inherit;font-size:14px;font-weight:700;cursor:pointer}
+.admin-only{display:none !important}
+body.role-admin .admin-only{display:inline-flex !important}
+body.role-admin button.admin-only{display:inline-flex !important}
+body.role-admin .btn.admin-only{display:inline-flex !important}
+body.role-admin div.admin-only{display:block !important}
 </style>
 </head>
 <body>
@@ -541,6 +562,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
       <button class="btn btn-dim" onclick="resetData()">Reset</button>
       <button class="btn btn-green" onclick="exportExcel()">Export Excel</button>
       <button class="btn" onclick="exportAllPDF()" title="Export all orders as PDF report" style="background:#9A7A2E;border-color:#9A7A2E;color:#fff">&#128196; PDF Report</button>
+      <button class="btn admin-only" onclick="showBackupMenu()" title="Backup & Restore" style="background:#1a6b4a;border-color:#1a6b4a;color:#fff">&#128274; Backup</button>
     </div>
   </div>
 
@@ -550,8 +572,9 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
     <span id="syncStatus">Connecting...</span>
     <span class="sync-tag" id="syncTag">LOCAL ONLY</span>
     <span style="flex:1"></span>
-    <button class="btn" style="font-size:11px;padding:3px 10px" onclick="manualSync()">&#8635; Sync</button>
+    <button class="btn" id="syncBtn" style="font-size:11px;padding:3px 10px" onclick="manualSync()">&#8635; Sync</button>
     <button class="btn" style="font-size:11px;padding:3px 10px" onclick="showSyncModal()">&#128100; Set Name</button>
+      <button class="btn" style="font-size:11px;padding:3px 10px;background:rgba(255,255,255,.06);color:#aaa" onclick="logout()" title="Sign out">Sign Out</button>
   </div>
 
   <!-- Tabs -->
@@ -654,6 +677,33 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
     </button>
   </nav>
 
+</div>
+
+<!-- Login Screen -->
+<div id="loginScreen">
+  <div class="login-card">
+    <img class="login-logo" src="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAMCAgICAgMCAgIDAwMDBAYEBAQEBAgGBgUGCQgKCgkICQkKDA8MCgsOCwkJDRENDg8QEBEQCgwSExIQEw8QEBD/2wBDAQMDAwQDBAgEBAgQCwkLEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBD/wAARCAHnAekDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD2WiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKANbwlx4q0Y/8AUQt//Ri19MecPQ18y+Ff+Ro0f/sIW/8A6MWvpDzB6mtICZ8t0UUVmMKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigDS8Mf8jRo3/YQt//AEYtfRnme1fOfhn/AJGjRv8Ar/t//Ri19E1pATPmSiiisxhRRRQAUUUUAFFFFABRRRQAUUUUAFFFFABRRRQAUUUUAFFFFABRRRQAUUUUAFFFFABRRRQAUUUUAFFFFABRRRQAUUUUAFFFFABRRRQAUUUUAFFFFABRRRQAUUUUAFFFFABRRRQAUUUUAFFFFABRRRQAUUUUAafhcZ8UaN/2ELf/ANGLX0bt9q+dPCvPijR/+whb/wDoxa+kauBLPlmiiioKCiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooA1fCf/ACNOjf8AYQt//Ri19LV80+E/+Rp0b/sIW/8A6MWvpariJnypRRRUDCiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooA1fCf/I06N/2ELf8A9GLX0tXzT4T/AORp0b/sIW//AKMWvpariJnypRRRUDCiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooA1fCf/I06N/2ELf/ANGLX0tXzT4T/wCRp0b/ALCFv/6MWvpariJnypRRRUDCiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooA1fCf8AyNOjf9hC3/8ARi19LV80+E/+Rp0b/sIW/wD6MWvpariJnypRRRUDCiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooA1fCf/ACNOjf8AYQt//Ri19LV80+E/+Rp0b/sIW/8A6MWvpariJnypRRRUDCiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooA1fCf/I06N/2ELf8A9GLX0tXzT4T/AORp0b/sIW//AKMWvpariJnypRRRUDCiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACirNtpuoXgzZ2FxOP+mcTN/IVbXwr4oddyeG9UYHuLOQ/0oAy6K1G8LeJ413SeHNUUeps5B/SqVxY3tnj7ZZzwZ4/eRlf5igCCiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKANXwn/AMjTo3/YQt//AEYtfS1fNPhP/kadG/7CFv8A+jFr6Wq4iZ8qUUUVAwooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACp7Kzm1C8gsbZd01zIsUY9WYgD9TUFenfAHwwuueNBqk6q0Gjp55DDrIchPyIJ/CqgrvUmTsj2eP4S+E18Hjw+2hab9s+x+Ubw26mTztv+s343fe5618pahY3GmX1xp10u2a1laGQejKSD+or7mr5j/aD8LjRfGC61AoWDWE8zCjGJVwH/PIP41nJ+/zdzSK9zl7HltFFFUSFFFFABRRRQAUUUUAFFFFABRRSgEnAGSaAErU8P8AhjXvFF4LHQdLnu5CQGKL8qZ7s3RR7k16f8NfgLda1HFrXjJZLSyb5o7QZWWUerf3AfzPtXv2kaLpOg2aafo+nw2lunRIlxntknqT7nmqtbcm99jxLwv+zXIyxXXi7WdmeWtbRckexkPH5D8a9K0b4S/D3Q4tsPhu1uCOTJeL55P/AH3kD8BU3jv4i6B4BsTPqUwmu5FzBZxsPMk9z/dX/aP6184eM/i14u8ZSNHNevY2RPy2ts5Vcf7R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">
+    <div class="login-title">Asha Creations</div>
+    <div class="login-sub">AI Merchandiser · Sign in to continue</div>
+    <div class="login-roles">
+      <div class="role-btn selected" id="roleAdmin" onclick="selectRole('admin')">
+        <div class="role-icon">👑</div>
+        <div class="role-name">Admin</div>
+        <div class="role-desc">Full access</div>
+      </div>
+      <div class="role-btn" id="roleTeam" onclick="selectRole('team')">
+        <div class="role-icon">👤</div>
+        <div class="role-name">Team</div>
+        <div class="role-desc">Tasks only</div>
+      </div>
+    </div>
+    <div class="login-pin-wrap">
+      <div class="login-pin-label">PIN</div>
+      <input class="login-pin" id="loginPin" type="password" maxlength="4" inputmode="numeric" placeholder="••••" onkeydown="if(event.key==='Enter')submitLogin()">
+    </div>
+    <div class="login-error" id="loginError"></div>
+    <button class="login-submit" onclick="submitLogin()">Sign In →</button>
+  </div>
 </div>
 
 <!-- Name Modal (replaces Sheets config) -->
@@ -1005,6 +1055,11 @@ function toggleTask(idx, taskName) {
   renderOrderKeepScroll();
   renderList();
   if(syncEnabled && gsUrl) pushTask(o.flowId, taskName, o.tasks[taskName]||'');
+  // Log activity
+  const _logVal = o.tasks[taskName];
+  logActivity(_logVal ? 'TASK_DONE' : 'TASK_UNDONE',
+    (_logVal?'✓ ':'✗ ')+taskName+' — '+o.style.trim()+' '+o.color.trim(),
+    '#'+o.flowId);
   // If order just completed
   if(taskName === 'Order Completed' && o.tasks[taskName]){
     // Check if completed before ex-factory date
@@ -1496,23 +1551,20 @@ function stopVoice(){
 }
 
 // ═══════════════════════════════════════
-// SUPABASE SYNC
+// SUPABASE SYNC — via official JS SDK
 // ═══════════════════════════════════════
-// ═══════════════════════════════════════════════════════════════
-// SUPABASE SYNC — Real-time, instant across all devices
-// ═══════════════════════════════════════════════════════════════
 const SB_URL  = 'https://fmsgpfbxniedjvwvhuzy.supabase.co';
 const SB_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZtc2dwZmJ4bmllZGp2d3ZodXp5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU1NTcwMjcsImV4cCI6MjA5MTEzMzAyN30.i4-D76bdl-zLXKB43JAoCqF3F8lGnRgjLq5PegAoXMU';
-const SB_HEADERS = { 'apikey': SB_KEY, 'Authorization': 'Bearer '+SB_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=representation' };
 
 let sbEnabled = false;
-let sbChannel = null;
+let sbClient  = null;
 let pollTimer = null;
-// Keep gsUrl/gsUser for compatibility
-let gsUrl = '', gsUser = localStorage.getItem('ai_merch_gs_user') || 'User';
+let gsUrl = '';
+let gsUser = localStorage.getItem('ai_merch_gs_user') || 'User';
 let syncEnabled = false;
 
-// ── UI helpers ───────────────────────────────────────────────
+function getSB(){ return null; } // Using direct REST instead of SDK
+
 function setSyncUI(label, connected, connecting){
   const dot = document.getElementById('syncDot');
   const st  = document.getElementById('syncStatus');
@@ -1522,352 +1574,281 @@ function setSyncUI(label, connected, connecting){
   if(tag){ tag.textContent = connected ? 'SUPABASE LIVE ●' : 'LOCAL ONLY'; tag.className = 'sync-tag'+(connected?' live':''); }
 }
 
-// ── REST helpers ─────────────────────────────────────────────
-async function sbFetch(path, opts={}){
-  const r = await fetch(SB_URL+'/rest/v1/'+path, { headers: SB_HEADERS, ...opts });
-  if(!r.ok){ const e=await r.text(); throw new Error(r.status+': '+e); }
-  return r.status === 204 ? null : r.json();
+// Direct REST calls — bypass SDK to avoid DataCloneError on iOS Safari
+async function sbREST(path, method='GET', body=null, prefer=null){
+  // Always put apikey in URL — avoids CORS preflight on all browsers including iOS Safari
+  const sep = path.includes('?') ? '&' : '?';
+  const url = SB_URL+'/rest/v1/'+path+sep+'apikey='+SB_KEY;
+  const opts = { method: method||'GET' };
+  if(body){
+    opts.headers = { 'Content-Type': 'application/json' };
+    if(prefer) opts.headers['Prefer'] = prefer;
+    opts.body = JSON.stringify(body);
+  }
+  const r = await fetch(url, opts);
+  if(r.status === 204 || r.status === 201) return null;
+  if(!r.ok){
+    const txt = await r.text().catch(()=>'');
+    throw new Error(r.status+': '+txt.slice(0,100));
+  }
+  return r.json();
 }
 
 async function sbGetOrders(){
-  return sbFetch('orders?select=*&order=created_at.asc');
+  try{
+    const data = await sbREST('orders?select=*&order=created_at.asc');
+    return Array.isArray(data) ? data : [];
+  }catch(e){ console.warn('sbGetOrders:', e.message); return []; }
 }
 
 async function sbGetSamples(){
-  return sbFetch('samples?select=*&order=created_at.asc');
+  try{
+    const data = await sbREST('samples?select=*&order=created_at.asc');
+    return Array.isArray(data) ? data : [];
+  }catch(e){ console.warn('sbGetSamples:', e.message); return []; }
 }
 
 async function sbUpsertOrder(o){
-  const row = {
-    flow_id:      o.flowId,
-    po:           o.po||'',
-    style:        o.style||'',
-    color:        o.color||'',
-    product:      o.product||'',
-    buyer:        o.buyer||'',
-    season:       o.season||'',
-    qty:          parseInt(o.qty)||0,
-    deadline:     o.deadline||null,
-    ex_factory:   o.exFactory||null,
-    order_date:   o.orderDate||null,
-    merchant:     o.merchant||'',
-    tasks:        o.tasks||{},
-    task_awb:     o.taskAWB||{},
-    remarks:      o.remarks||'',
-    delay_reasons:o.delayReasons||{}
-  };
-  return sbFetch('orders?on_conflict=flow_id', {
-    method:'POST',
-    headers:{...SB_HEADERS,'Prefer':'resolution=merge-duplicates,return=representation'},
-    body:JSON.stringify(row)
-  });
+  try{
+    const row = {
+      flow_id:o.flowId, po:o.po||'', style:o.style||'', color:o.color||'',
+      product:o.product||'', buyer:o.buyer||'', season:o.season||'',
+      qty:parseInt(o.qty)||0, deadline:o.deadline||null, ex_factory:o.exFactory||null,
+      order_date:o.orderDate||null, merchant:o.merchant||'',
+      tasks:JSON.parse(JSON.stringify(o.tasks||{})),
+      task_awb:JSON.parse(JSON.stringify(o.taskAWB||{})),
+      remarks:o.remarks||'',
+      delay_reasons:JSON.parse(JSON.stringify(o.delayReasons||{}))
+    };
+    await sbREST('orders?on_conflict=flow_id','POST',row);
+  }catch(e){ console.warn('sbUpsertOrder:', e.message); }
 }
 
 async function sbUpsertSample(s){
-  const row = {
-    id: s.id, name: s.name||'', style: s.style||'',
-    type: s.type||'', buyer: s.buyer||'', qty: parseInt(s.qty)||0,
-    status: s.status||'Pending Dispatch', sent: !!s.sent,
-    notes: s.notes||'', date: s.date||null,
-    awb: s.awb||'', photo: s.photo||''
-  };
-  return sbFetch('samples?on_conflict=id', {
-    method:'POST',
-    headers:{...SB_HEADERS,'Prefer':'resolution=merge-duplicates,return=representation'},
-    body:JSON.stringify(row)
-  });
+  try{
+    await sbREST('samples?on_conflict=id','POST',{
+      id:s.id, name:s.name||'', style:s.style||'', type:s.type||'',
+      buyer:s.buyer||'', qty:parseInt(s.qty)||0,
+      status:s.status||'Pending Dispatch', sent:!!s.sent,
+      notes:s.notes||'', date:s.date||null, awb:s.awb||'',
+      photo:s.photo?s.photo.slice(0,500000):''
+    });
+  }catch(e){ console.warn('sbUpsertSample:', e.message); }
 }
 
-// ── Row → app object converters ──────────────────────────────
 function rowToOrder(r){
-  const o = {
-    flowId:       String(r.flow_id),
-    po:           r.po||'',
-    style:        r.style||'',
-    color:        r.color||'',
-    product:      r.product||'',
-    buyer:        r.buyer||'',
-    season:       r.season||'',
-    qty:          r.qty||0,
-    deadline:     r.deadline||'',
-    exFactory:    r.ex_factory||'',
-    orderDate:    r.order_date||'',
-    merchant:     r.merchant||'',
-    tasks:        r.tasks||{},
-    taskAWB:      r.task_awb||{},
-    remarks:      r.remarks||'',
-    delayReasons: r.delay_reasons||{}
+  const o={
+    flowId:String(r.flow_id), po:r.po||'', style:r.style||'', color:r.color||'',
+    product:r.product||'', buyer:r.buyer||'', season:r.season||'',
+    qty:r.qty||0, deadline:r.deadline||'', exFactory:r.ex_factory||'',
+    orderDate:r.order_date||'', merchant:r.merchant||'',
+    tasks:r.tasks||{}, taskAWB:r.task_awb||{},
+    remarks:r.remarks||'', delayReasons:r.delay_reasons||{}
   };
-  TASK_COLS.forEach(t => { if(o.tasks[t]===undefined) o.tasks[t]=null; });
+  TASK_COLS.forEach(t=>{if(o.tasks[t]===undefined)o.tasks[t]=null;});
   return o;
 }
 
 function rowToSample(r){
   return {
-    id: r.id, name: r.name||'', style: r.style||'',
-    type: r.type||'', buyer: r.buyer||'', qty: r.qty||0,
-    status: r.status||'Pending Dispatch', sent: !!r.sent,
-    notes: r.notes||'', date: r.date||'',
-    awb: r.awb||'', photo: r.photo||''
+    id:r.id, name:r.name||'', style:r.style||'', type:r.type||'',
+    buyer:r.buyer||'', qty:r.qty||0, status:r.status||'Pending Dispatch',
+    sent:!!r.sent, notes:r.notes||'', date:r.date||'',
+    awb:r.awb||'', photo:r.photo||''
   };
 }
 
-// ── pushTask — instant upsert whole order ────────────────────
 async function pushTask(flowId, task, value){
-  save(); // local first
+  save();
   if(!sbEnabled) return;
   const o = orders.find(x=>x.flowId===flowId);
-  if(!o) return;
-  try{ await sbUpsertOrder(o); }
-  catch(e){ console.warn('Supabase pushTask failed:', e.message); }
+  if(o) sbUpsertOrder(o).catch(()=>{});
 }
 
-// ── Init: load from Supabase ─────────────────────────────────
 async function sbInit(){
-  setSyncUI('Connecting to Supabase...', false, true);
-  // Timeout after 8 seconds — app still works locally if Supabase is slow
+  setSyncUI('Connecting...', false, true);
   const timeout = setTimeout(()=>{
-    if(!sbEnabled) setSyncUI('Supabase slow — using local data', false, false);
-  }, 8000);
+    if(!sbEnabled) setSyncUI('Tap Sync to retry', false, false);
+  }, 20000);
   try{
     const [rows, srows] = await Promise.all([sbGetOrders(), sbGetSamples()]);
     clearTimeout(timeout);
 
     if(rows && rows.length > 0){
-      // Merge Supabase rows with local
-      const localById = {};
-      orders.forEach(o => localById[o.flowId] = o);
-      const sbById = {};
-      rows.forEach(r => sbById[r.flow_id] = r);
+      const localById={};
+      orders.forEach(o=>localById[o.flowId]=o);
+      const sbById={};
+      rows.forEach(r=>sbById[r.flow_id]=r);
 
-      orders = rows.map(r => {
-        const o = rowToOrder(r);
-        const local = localById[o.flowId];
+      orders = rows.map(r=>{
+        const o=rowToOrder(r);
+        const local=localById[o.flowId];
         if(local){
-          if(local.tasks['Order Completed'] && !o.tasks['Order Completed'])
-            o.tasks['Order Completed'] = local.tasks['Order Completed'];
-          if(local.taskAWB && Object.keys(local.taskAWB).length)
-            o.taskAWB = {...o.taskAWB, ...local.taskAWB};
+          if(local.tasks['Order Completed']&&!o.tasks['Order Completed'])
+            o.tasks['Order Completed']=local.tasks['Order Completed'];
+          if(local.taskAWB&&Object.keys(local.taskAWB).length)
+            o.taskAWB={...o.taskAWB,...local.taskAWB};
         }
         return o;
       });
 
-      // Push ALL local orders to Supabase (preserves task completions)
-      // Local orders (from localStorage) have completed tasks — ORDERS_DATA does not
-      const allLocalOrders = (() => {
-        try {
-          const saved = localStorage.getItem(STORAGE_KEY);
-          if(saved){ const p = JSON.parse(saved); if(p && p.length > 0) return p; }
-        } catch(e){}
-        return ORDERS_DATA; // fallback only if no local data
-      })();
-
-      // Find orders missing from Supabase
-      const missingOrders = allLocalOrders.filter(od => !sbById[od.flowId]);
-      // Also find orders where local has MORE task completions than Supabase
-      const staleOrders = orders.filter(sbO => {
-        const localO = allLocalOrders.find(l => l.flowId === sbO.flowId);
-        if(!localO || !localO.tasks) return false;
-        const sbDone = TASK_COLS.filter(t => sbO.tasks[t] && !String(sbO.tasks[t]).includes('(planned)')).length;
-        const localDone = TASK_COLS.filter(t => localO.tasks[t] && !String(localO.tasks[t]).includes('(planned)')).length;
-        return localDone > sbDone; // local has more completions
+      // Push any orders missing from Supabase
+      const allLocal=(()=>{try{const s=localStorage.getItem(STORAGE_KEY);if(s){const p=JSON.parse(s);if(p&&p.length>0)return p;}}catch(e){}return ORDERS_DATA;})();
+      const missing=allLocal.filter(od=>!sbById[od.flowId]);
+      const stale=orders.filter(sbO=>{
+        const loc=allLocal.find(l=>l.flowId===sbO.flowId);
+        if(!loc||!loc.tasks)return false;
+        const sbDone=TASK_COLS.filter(t=>sbO.tasks[t]&&!String(sbO.tasks[t]).includes('(planned)')).length;
+        const lDone=TASK_COLS.filter(t=>loc.tasks[t]&&!String(loc.tasks[t]).includes('(planned)')).length;
+        return lDone>sbDone;
       });
-
-      const toSync = [...missingOrders, ...staleOrders.map(o => allLocalOrders.find(l=>l.flowId===o.flowId)).filter(Boolean)];
-      const uniqueToSync = [...new Map(toSync.map(o=>[o.flowId,o])).values()];
-
-      if(uniqueToSync.length > 0){
-        setSyncUI('Restoring '+uniqueToSync.length+' orders with task data...', false, true);
-        for(const od of uniqueToSync){
-          try{
-            const full = {...od, tasks: od.tasks||{}, taskAWB: od.taskAWB||{}, remarks: od.remarks||'', delayReasons: od.delayReasons||{}};
-            TASK_COLS.forEach(t=>{ if(full.tasks[t]===undefined) full.tasks[t]=null; });
-            await sbUpsertOrder(full);
-            // Update in orders array too
-            const idx2 = orders.findIndex(o=>o.flowId===full.flowId);
-            if(idx2>=0) orders[idx2] = rowToOrder({flow_id:full.flowId,po:full.po,style:full.style,color:full.color,product:full.product,buyer:full.buyer,season:full.season,qty:full.qty,deadline:full.deadline,ex_factory:full.exFactory,order_date:full.orderDate,merchant:full.merchant,tasks:full.tasks,task_awb:full.taskAWB,remarks:full.remarks,delay_reasons:full.delayReasons});
-            else orders.push(full);
-          } catch(e){ console.warn('Failed to sync order:', od.flowId, e.message); }
+      const toSync=[...missing,...stale.map(o=>allLocal.find(l=>l.flowId===o.flowId)).filter(Boolean)];
+      const unique=[...new Map(toSync.map(o=>[o.flowId,o])).values()];
+      if(unique.length>0){
+        setSyncUI('Restoring '+unique.length+' orders...', false, true);
+        for(const od of unique){
+          const full={...od,tasks:od.tasks||{},taskAWB:od.taskAWB||{},remarks:od.remarks||'',delayReasons:od.delayReasons||{}};
+          TASK_COLS.forEach(t=>{if(full.tasks[t]===undefined)full.tasks[t]=null;});
+          await sbUpsertOrder(full);
+          const idx2=orders.findIndex(o=>o.flowId===full.flowId);
+          if(idx2>=0)orders[idx2]=full; else orders.push(full);
         }
-        const missingCount = missingOrders.length;
-        const staleCount = staleOrders.length;
-        const restoreMsg = '✅ Restored all order data! '+(missingCount>0?missingCount+' missing orders added. ':'')+( staleCount>0?staleCount+' orders updated with task completions.':'');
-        addMsg('assistant', restoreMsg);
+        addMsg('assistant','✅ Synced '+unique.length+' orders to Supabase.');
       }
     } else {
-      // Empty DB — use ORDERS_DATA as source and push to Supabase
-      setSyncUI('First time setup — pushing orders to Supabase...', false, true);
-      // Make sure we have the hardcoded orders
-      if(!orders || orders.length === 0){
-        orders = JSON.parse(JSON.stringify(ORDERS_DATA));
-        save();
-      }
-      // Push all orders to Supabase
-      let pushed = 0;
-      for(const o of orders){
-        try{ await sbUpsertOrder(o); pushed++; } catch(e){ console.warn('Push failed:', e.message); }
-      }
-      addMsg('assistant', '✅ Pushed '+pushed+' orders to Supabase! All devices will now sync automatically.');
-      renderList(); renderOrder(); updateStat();
+      const allLocal=(()=>{try{const s=localStorage.getItem(STORAGE_KEY);if(s){const p=JSON.parse(s);if(p&&p.length>0)return p;}}catch(e){}return ORDERS_DATA;})();
+      if(!orders||orders.length===0){orders=JSON.parse(JSON.stringify(allLocal));save();}
+      setSyncUI('First sync — uploading...', false, true);
+      let pushed=0;
+      for(const o of orders){try{await sbUpsertOrder(o);pushed++;}catch(e){}}
+      addMsg('assistant','✅ Pushed '+pushed+' orders to Supabase!');
     }
 
-    if(srows && srows.length > 0){
-      const localSById = {};
-      samples.forEach(s => localSById[s.id] = s);
-      samples = srows.map(r => {
-        const s = rowToSample(r);
-        const loc = localSById[s.id];
-        if(loc){ const p=loc.photo||''; if(p) s.photo=p; }
+    if(srows&&srows.length>0){
+      const localSById={};samples.forEach(s=>localSById[s.id]=s);
+      samples=srows.map(r=>{
+        const s=rowToSample(r);
+        const loc=localSById[s.id];
+        if(loc){const p=loc.photo||'';if(p)s.photo=p;}
         return s;
       });
     }
 
     save(); saveSamples();
-    sbEnabled = true; syncEnabled = true;
+    sbEnabled=true; syncEnabled=true;
     setSyncUI('Connected — '+gsUser, true, false);
-    startRealtime();
-    renderList(); renderOrder(); updateStat();
-    // Dismiss splash early if still showing
-    const sp = document.getElementById('splash');
-    if(sp){ sp.classList.add('hide'); setTimeout(()=>{ try{sp.remove();}catch(e){} }, 700); }
+    loadActivity();
+    startKeepAlive();
+    const sp=document.getElementById('splash');
+    if(sp){sp.classList.add('hide');setTimeout(()=>{try{sp.remove();}catch(e){}},700);}
+    startRealtime(); renderList(); renderOrder(); updateStat();
 
   } catch(e){
     clearTimeout(timeout);
-    console.error('Supabase init failed:', e.message);
-    setSyncUI('Supabase offline — local mode', false, false);
-    // Still show local data
-    if(!orders || orders.length === 0){
-      orders = JSON.parse(JSON.stringify(ORDERS_DATA));
-      save();
+    console.error('sbInit error:', e.message);
+    setSyncUI('Offline — tap Sync to retry', false, false);
+    if(!orders||orders.length===0){
+      try{const s=localStorage.getItem(STORAGE_KEY);if(s){const p=JSON.parse(s);if(p&&p.length>0){orders=p;save();}}}catch(ex){}
+      if(!orders||orders.length===0){orders=JSON.parse(JSON.stringify(ORDERS_DATA));save();}
     }
     renderList(); renderOrder(); updateStat();
+    setTimeout(()=>{if(!sbEnabled)sbInit();},8000);
   }
 }
 
-// ── Real-time via polling (10s — much faster than 30s Sheets) ─
-// Full WebSocket realtime requires SDK; this is clean and reliable
 function startRealtime(){
-  if(pollTimer) clearInterval(pollTimer);
-  pollTimer = setInterval(async()=>{
-    if(!sbEnabled) return;
+  if(pollTimer)clearInterval(pollTimer);
+  pollTimer=setInterval(async()=>{
+    if(!sbEnabled)return;
     try{
-      const [rows, srows] = await Promise.all([sbGetOrders(), sbGetSamples()]);
-      if(!rows || !rows.length) return;
-
-      const localById = {};
-      orders.forEach(o => localById[o.flowId] = o);
-      let changed = false;
-
-      rows.forEach(r => {
-        const fresh = rowToOrder(r);
-        if(!localById[fresh.flowId]){
-          orders.push(fresh); changed = true;
-        } else {
-          const local = localById[fresh.flowId];
-          // Supabase is source of truth — merge carefully
-          TASK_COLS.forEach(t => {
-            if(fresh.tasks[t] && !local.tasks[t]){ local.tasks[t]=fresh.tasks[t]; changed=true; }
-            // Supabase wins if it has Order Completed
-            if(fresh.tasks['Order Completed']) { local.tasks['Order Completed']=fresh.tasks['Order Completed']; changed=true; }
-          });
-          // Merge taskAWB
-          if(fresh.taskAWB) Object.assign(local.taskAWB||{}, fresh.taskAWB);
-          if(fresh.remarks && !local.remarks){ local.remarks=fresh.remarks; changed=true; }
+      const [rows,srows]=await Promise.all([sbGetOrders(),sbGetSamples()]);
+      if(!rows||!rows.length)return;
+      const localById={};orders.forEach(o=>localById[o.flowId]=o);
+      let changed=false;
+      rows.forEach(r=>{
+        const fresh=rowToOrder(r);
+        if(!localById[fresh.flowId]){orders.push(fresh);changed=true;}
+        else{
+          const local=localById[fresh.flowId];
+          TASK_COLS.forEach(t=>{if(fresh.tasks[t]&&!local.tasks[t]){local.tasks[t]=fresh.tasks[t];changed=true;}});
+          if(fresh.tasks['Order Completed']){local.tasks['Order Completed']=fresh.tasks['Order Completed'];changed=true;}
+          if(fresh.taskAWB)Object.entries(fresh.taskAWB).forEach(([k,v])=>{if(v&&!local.taskAWB?.[k]){if(!local.taskAWB)local.taskAWB={};local.taskAWB[k]=v;changed=true;}});
         }
       });
-
-      // Merge samples
-      if(srows && srows.length){
-        const localSById = {};
-        samples.forEach(s => localSById[s.id] = s);
-        srows.forEach(r => {
-          const fresh = rowToSample(r);
-          if(!localSById[fresh.id]){ samples.push(fresh); changed=true; }
-          else {
-            const loc = localSById[fresh.id];
-            const savedPhoto = loc.photo||'';
-            Object.assign(loc, fresh);
-            if(savedPhoto) loc.photo = savedPhoto; // never lose photo
-          }
+      if(srows&&srows.length){
+        const lsById={};samples.forEach(s=>lsById[s.id]=s);
+        srows.forEach(r=>{
+          const fresh=rowToSample(r);
+          if(!lsById[fresh.id]){samples.push(fresh);changed=true;}
+          else{const loc=lsById[fresh.id];const p=loc.photo||'';Object.assign(loc,fresh);if(p)loc.photo=p;}
         });
       }
-
-      if(changed){ save(); saveSamples(); renderList(); renderOrder(); updateStat(); }
-    } catch(e){}
-  }, 10000); // 10 seconds — 3x faster than Sheets
+      if(changed){save();saveSamples();renderList();renderOrder();updateStat();}
+    }catch(e){}
+  },10000);
 }
 
-// ── Manual sync ──────────────────────────────────────────────
 async function manualSync(){
-  if(!sbEnabled){ addMsg('assistant','Supabase is not connected.'); return; }
+  if(!sbEnabled){
+    addMsg('assistant','🔄 Retrying Supabase connection...');
+    sbEnabled=false; sbClient=null;
+    await sbInit(); return;
+  }
   setSyncUI('Syncing...', false, true);
   try{
-    const [rows, srows] = await Promise.all([sbGetOrders(), sbGetSamples()]);
-    if(rows && rows.length){
-      const localById = {};
-      orders.forEach(o => localById[o.flowId] = o);
-      orders = rows.map(r => {
-        const o = rowToOrder(r);
-        const local = localById[o.flowId];
+    const [rows,srows]=await Promise.all([sbGetOrders(),sbGetSamples()]);
+    if(rows&&rows.length){
+      const localById={};orders.forEach(o=>localById[o.flowId]=o);
+      orders=rows.map(r=>{
+        const o=rowToOrder(r);
+        const local=localById[o.flowId];
         if(local){
-          if(local.tasks['Order Completed'] && !o.tasks['Order Completed'])
-            o.tasks['Order Completed'] = local.tasks['Order Completed'];
-          if(local.taskAWB) o.taskAWB = {...o.taskAWB, ...local.taskAWB};
+          if(local.tasks['Order Completed']&&!o.tasks['Order Completed'])o.tasks['Order Completed']=local.tasks['Order Completed'];
+          if(local.taskAWB)o.taskAWB={...o.taskAWB,...local.taskAWB};
         }
         return o;
       });
     }
-    if(srows && srows.length){
-      const localSById = {};
-      samples.forEach(s => localSById[s.id] = s);
-      samples = srows.map(r => {
-        const s = rowToSample(r);
-        const loc = localSById[s.id];
-        if(loc && loc.photo) s.photo = loc.photo;
-        return s;
-      });
+    if(srows&&srows.length){
+      const lsById={};samples.forEach(s=>lsById[s.id]=s);
+      samples=srows.map(r=>{const s=rowToSample(r);const loc=lsById[s.id];if(loc&&loc.photo)s.photo=loc.photo;return s;});
     }
-    save(); saveSamples(); renderList(); renderOrder(); updateStat();
+    save();saveSamples();renderList();renderOrder();updateStat();
     setSyncUI('Connected — '+gsUser, true, false);
     addMsg('assistant','✅ Synced from Supabase — '+orders.length+' orders.');
-  } catch(e){
-    setSyncUI('Sync failed', false, false);
+  }catch(e){
+    setSyncUI('Sync failed — '+e.message.slice(0,30), false, false);
     addMsg('assistant','⚠️ Sync failed: '+e.message);
   }
 }
 
-// ── Stub old Sheets functions (keep compatibility) ───────────
-
-function saveName(){
-  const name = (document.getElementById('gsNameInput').value||'').trim();
-  if(name){ gsUser=name; localStorage.setItem('ai_merch_gs_user',name); setSyncUI('Connected — '+name, sbEnabled, false); }
-  hideSyncModal();
-}
-function showSyncModal(){ 
-  const name = prompt('Your name (shown in sync banner):', gsUser);
-  if(name){ gsUser=name.trim(); localStorage.setItem('ai_merch_gs_user',gsUser); setSyncUI('Connected — '+gsUser, sbEnabled, false); }
+function showSyncModal(){
+  const name=prompt('Your display name:',gsUser)||gsUser;
+  gsUser=name.trim();
+  localStorage.setItem('ai_merch_gs_user',gsUser);
+  setSyncUI(sbEnabled?'Connected — '+gsUser:'Offline', sbEnabled, false);
 }
 function hideSyncModal(){}
-async function connectSheets(){ showSyncModal(); }
+function connectSheets(){}
 async function gsPost(body){
-  // Route to Supabase based on action
-  if(!sbEnabled) return;
+  if(!sbEnabled)return{success:true};
   try{
-    if(body.action==='addOrder' || body.action==='updateTask' || body.action==='updateTaskAWB'){
-      const o = orders.find(x=>x.flowId===(body.flowId||body.order?.flowId));
-      if(o) await sbUpsertOrder(o);
-    } else if(body.action==='addSample' || body.action==='updateSample'){
-      const s = samples.find(x=>x.id===body.sample?.id);
-      if(s) await sbUpsertSample(s);
-    } else if(body.action==='initSheet'){
-      // Push all orders
-      for(const o of orders){ try{ await sbUpsertOrder(o); }catch(e){} }
+    if(body.action==='addOrder'||body.action==='updateTask'||body.action==='updateTaskAWB'){
+      const o=orders.find(x=>x.flowId===(body.flowId||body.order?.flowId));
+      if(o)sbUpsertOrder(o).catch(()=>{});
+    }else if(body.action==='addSample'||body.action==='updateSample'){
+      const s=samples.find(x=>x.id===body.sample?.id);
+      if(s)sbUpsertSample(s).catch(()=>{});
     }
-  } catch(e){ console.warn('gsPost routing failed:', e.message); }
-  return { success: true };
+  }catch(e){}
+  return{success:true};
 }
 
-
+function saveName(){
+  const name=(document.getElementById('gsNameInput')?.value||'').trim();
+  if(name){gsUser=name;localStorage.setItem('ai_merch_gs_user',name);setSyncUI(sbEnabled?'Connected — '+name:'Offline',sbEnabled,false);}
+  hideSyncModal();
+}
 // ═══════════════════════════════════════
 // TNA TEMPLATES + DELAY DETECTION
 // ═══════════════════════════════════════
@@ -2491,6 +2472,7 @@ function showEditOrder(idx){
 }
 
 function showAddOrderPanel(){
+  if(currentRole !== 'admin'){ addMsg('assistant','⛔ Only admin can add orders.'); return; }
   const panel=document.getElementById('mainPanel');
   if(activeTab!=='orders') switchTab('orders');
   panel.innerHTML='<div class="main-header" style="flex-shrink:0"><div style="display:flex;justify-content:space-between;align-items:center"><h2>Add New Order</h2><button onclick="renderOrder()" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:13px;font-family:inherit">← Cancel</button></div><p>Fill in the details — all 26 tasks will be created automatically</p></div>'+
@@ -2513,6 +2495,7 @@ function showAddOrderPanel(){
 }
 
 function submitNewOrder(){
+  if(currentRole !== 'admin'){ addMsg('assistant','⛔ Only admin can add orders.'); return; }
   const style=(document.getElementById('ao-style').value||'').trim();
   const color=(document.getElementById('ao-color').value||'').trim();
   const buyer=document.getElementById('ao-buyer').value;
@@ -2595,6 +2578,451 @@ function hideHomepage(){
 }
 
 
+
+// ═══════════════════════════════════════
+// AUTH — Role-based Access
+// ═══════════════════════════════════════
+const ADMIN_PIN = '1234';
+const TEAM_PIN  = '0000';
+const AUTH_KEY  = 'ai_merch_auth';
+let currentRole = null;
+let currentUser = '';
+let loginRole = 'admin';
+
+function selectRole(role){
+  loginRole = role;
+  document.getElementById('roleAdmin').classList.toggle('selected', role==='admin');
+  document.getElementById('roleTeam').classList.toggle('selected', role==='team');
+  document.getElementById('loginPin').value = '';
+  document.getElementById('loginPin').focus();
+  document.getElementById('loginError').textContent = '';
+}
+
+function submitLogin(){
+  const pin = document.getElementById('loginPin').value.trim();
+  const errEl = document.getElementById('loginError');
+  if(loginRole==='admin' && pin===ADMIN_PIN){ setAuth('admin','Ankush'); }
+  else if(loginRole==='team' && pin===TEAM_PIN){
+    const name = prompt('Your name:','')||'Team';
+    setAuth('team', name.trim());
+  } else {
+    errEl.textContent = 'Incorrect PIN. Try again.';
+    document.getElementById('loginPin').value = '';
+    document.getElementById('loginPin').focus();
+    setTimeout(()=>errEl.textContent='', 3000);
+  }
+}
+
+function setAuth(role, name){
+  currentRole = role; currentUser = name; gsUser = name;
+  localStorage.setItem(AUTH_KEY, JSON.stringify({role, name, ts: Date.now()}));
+  localStorage.setItem('ai_merch_gs_user', name);
+  document.body.classList.remove('role-admin','role-team');
+  document.body.classList.add('role-'+role);
+  const ls = document.getElementById('loginScreen');
+  if(ls){ ls.style.opacity='0'; ls.style.transition='opacity .3s'; setTimeout(()=>ls.remove(), 300); }
+  setSyncUI(sbEnabled?'Connected — '+name:'Connecting...', sbEnabled, !sbEnabled);
+  const stEl = document.getElementById('syncStatus');
+  if(stEl){
+    const badge = role==='admin'
+      ? ' <span style="font-size:10px;padding:1px 7px;border-radius:10px;background:#FDF8EC;color:#9A7A2E;border:1px solid #DFC98A;font-weight:700">ADMIN</span>'
+      : ' <span style="font-size:10px;padding:1px 7px;border-radius:10px;background:#f0f4ff;color:#4361ee;border:1px solid #bcd0ff;font-weight:700">TEAM</span>';
+    stEl.innerHTML = (sbEnabled?'Connected — ':'Connecting... ')+name+badge;
+  }
+}
+
+function checkAuth(){
+  try {
+    const saved = localStorage.getItem(AUTH_KEY);
+    if(saved){
+      const {role, name, ts} = JSON.parse(saved);
+      if(Date.now() - ts < 24*60*60*1000){ setAuth(role, name); return true; }
+    }
+  } catch(e){}
+  return false;
+}
+
+function logout(){
+  localStorage.removeItem(AUTH_KEY);
+  currentRole=null; currentUser='';
+  document.body.classList.remove('role-admin','role-team');
+  location.reload();
+}
+
+// ═══════════════════════════════════════
+// PDF HELPERS
+// ═══════════════════════════════════════
+function mkCanvas(size){ const c=document.createElement('canvas'); c.width=c.height=size; return c; }
+function canvasToImg(canvas){ return canvas.toDataURL('image/png'); }
+
+function drawDonutChart(canvas, pct, color, bg){
+  const ctx=canvas.getContext('2d'), r=canvas.width/2, lineW=r*.28;
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.beginPath(); ctx.arc(r,r,r-lineW/2,0,Math.PI*2);
+  ctx.strokeStyle=bg||'#F2F0EC'; ctx.lineWidth=lineW; ctx.stroke();
+  const start=-Math.PI/2, end=start+(Math.PI*2*(pct/100));
+  ctx.beginPath(); ctx.arc(r,r,r-lineW/2,start,end);
+  ctx.strokeStyle=color; ctx.lineWidth=lineW; ctx.lineCap='round'; ctx.stroke();
+  ctx.fillStyle='#1C1917'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.font='bold '+(r*.38)+'px sans-serif';
+  ctx.fillText(pct+'%',r,r);
+}
+
+function drawPieChart(canvas, slices){
+  const ctx=canvas.getContext('2d'), r=canvas.width/2;
+  const total=slices.reduce((s,x)=>s+x.value,0); if(!total) return;
+  let angle=-Math.PI/2;
+  slices.forEach(s=>{
+    const sweep=(s.value/total)*Math.PI*2;
+    ctx.beginPath(); ctx.moveTo(r,r); ctx.arc(r,r,r-4,angle,angle+sweep);
+    ctx.closePath(); ctx.fillStyle=s.color; ctx.fill(); angle+=sweep;
+  });
+  ctx.beginPath(); ctx.arc(r,r,r*.45,0,Math.PI*2); ctx.fillStyle='#fff'; ctx.fill();
+}
+
+function exportOrderPDF(idx){
+  if(!window.jspdf){ addMsg('assistant','PDF library loading, try again in a moment.'); return; }
+  const o=orders[idx]; if(!o) return;
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+  const W=210, pad=14;
+  doc.setFillColor(28,25,23); doc.rect(0,0,W,36,'F');
+  doc.setFillColor(201,168,76); doc.rect(0,36,W,2,'F');
+  doc.setTextColor(255,255,255); doc.setFontSize(18); doc.setFont('helvetica','bold');
+  doc.text('ASHA CREATIONS', pad, 14);
+  doc.setFontSize(9); doc.setFont('helvetica','normal'); doc.setTextColor(200,180,140);
+  doc.text('AI Merchandiser · Order Report', pad, 22);
+  doc.setTextColor(150,140,120);
+  doc.text(new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'long',year:'numeric'}), W-pad, 22, {align:'right'});
+  let y=48;
+  doc.setTextColor(28,25,23); doc.setFontSize(20); doc.setFont('helvetica','bold');
+  doc.text(o.style.trim()+' — '+o.color.trim(), pad, y); y+=8;
+  doc.setFontSize(9); doc.setFont('helvetica','normal'); doc.setTextColor(100,95,90);
+  doc.text('Flow #'+o.flowId+' · '+o.buyer+' · '+o.product+' · '+o.season, pad, y); y+=10;
+  const metas=[['PO',o.po||'—'],['Order Qty',(o.qty||0).toLocaleString()+' pcs'],['Order Date',(o.orderDate||'—').slice(0,10)],['Ex-Factory',(o.exFactory||'—').slice(0,10)],['Merchant',o.merchant||'—'],['Season',o.season||'—']];
+  const cardW=(W-pad*2-10)/3, cardH=14;
+  metas.forEach((m,i)=>{const col=i%3,row=Math.floor(i/3);const x=pad+col*(cardW+5),cy=y+row*(cardH+4);doc.setFillColor(245,243,239);doc.roundedRect(x,cy,cardW,cardH,2,2,'F');doc.setFontSize(7);doc.setFont('helvetica','normal');doc.setTextColor(140,130,120);doc.text(m[0].toUpperCase(),x+4,cy+5);doc.setFontSize(8.5);doc.setFont('helvetica','bold');doc.setTextColor(28,25,23);doc.text(String(m[1]),x+4,cy+11);});
+  y+=(cardH+4)*2+8;
+  const tc26=TASK_COLS.filter(t=>t!=='Order Completed'&&t!=='Ex-Factory');
+  const done2=tc26.filter(t=>o.tasks&&o.tasks[t]&&!String(o.tasks[t]).includes('(planned)')).length;
+  const pct2=Math.round(done2/tc26.length*100);
+  const dCov=mkCanvas(160); drawDonutChart(dCov,pct2,'#C9A84C','#F2F0EC');
+  doc.addImage(canvasToImg(dCov),'PNG',pad,y,28,28);
+  const SECS=[{n:'Material',tasks:['Fabric Order','Trims Order','Trims Approval','Trims Payment','Labdips','Bulk Fabric In-house','Trims In-House'],col:[74,144,217]},{n:'Sampling',tasks:['Fit Sample Indent','Fit Sample Dispatch','Fit Sample Approval','PP Sample Indent','PP Sample Dispatch','PP Sample Recieve','FPT Approval','GPT Indent To Testing Agency','GPT Approval','PP Sample Approval'],col:[244,132,95]},{n:'Production',tasks:['Cutting','Sewing','Inline Inspection','Finishing','Packing','Final Inspection'],col:[82,183,136]},{n:'Shipment',tasks:['Shipment Sample Dispatch','Shipment Sample Approval'],col:[201,168,76]}];
+  let bx=pad+32,by=y;
+  SECS.forEach(s=>{const sd=s.tasks.filter(t=>o.tasks&&o.tasks[t]&&!String(o.tasks[t]).includes('(planned)')).length;const sp=s.tasks.length?Math.round(sd/s.tasks.length*100):0;doc.setFontSize(7.5);doc.setFont('helvetica','normal');doc.setTextColor(80,75,70);doc.text(s.n,bx,by+3.5);doc.setFillColor(235,232,228);doc.roundedRect(bx,by+5,75,4,1,1,'F');if(sp>0){doc.setFillColor(...s.col);doc.roundedRect(bx,by+5,75*(sp/100),4,1,1,'F');}doc.setFontSize(7);doc.setFont('helvetica','bold');doc.setTextColor(...s.col);doc.text(sp+'%',bx+78,by+8.5);by+=12;});
+  y=Math.max(y+30,by)+6;
+  doc.setDrawColor(201,168,76);doc.setLineWidth(.4);doc.line(pad,y,W-pad,y);y+=6;
+  const GROUPS=[['Material & Trims',['Fabric Order','Trims Order','Trims Approval','Trims Payment','Labdips','Bulk Fabric In-house','Trims In-House']],['Sampling',['Fit Sample Indent','Fit Sample Dispatch','Fit Sample Approval','PP Sample Indent','PP Sample Dispatch','PP Sample Recieve','FPT Approval','GPT Indent To Testing Agency','GPT Approval','PP Sample Approval']],['Production',['Cutting','Sewing','Inline Inspection','Finishing','Packing','Final Inspection']],['Shipment',['Shipment Sample Dispatch','Shipment Sample Approval']]];
+  const GC={'Material & Trims':[74,144,217],'Sampling':[244,132,95],'Production':[82,183,136],'Shipment':[201,168,76]};
+  GROUPS.forEach(([grp,tasks])=>{
+    if(y>255){doc.addPage();y=16;}
+    const [r2,g2,b2]=GC[grp]||[100,100,100];
+    const dg=tasks.filter(t=>o.tasks&&o.tasks[t]&&!String(o.tasks[t]).includes('(planned)')).length;
+    const rows2=tasks.map(t=>{const val=o.tasks&&o.tasks[t];const isDone=val&&!String(val).includes('(planned)');const dr=o.delayReasons&&o.delayReasons[t];return[t,isDone?'Done':val?'Planned':'Pending',isDone?String(val).slice(0,10):(val?String(val).replace(' (planned)','').slice(0,10):'—'),dr?dr.reason.slice(0,35)+'…':''];});
+    doc.autoTable({startY:y,head:[[{content:'◼ '+grp.toUpperCase()+' ('+dg+'/'+tasks.length+')',colSpan:4,styles:{fillColor:[r2,g2,b2],textColor:255,fontStyle:'bold',fontSize:8.5,cellPadding:3}}],['Task','Status','Date','Delay Reason']],body:rows2,margin:{left:pad,right:pad},headStyles:{fillColor:[r2,g2,b2],textColor:255,fontSize:7.5,fontStyle:'bold',cellPadding:2},bodyStyles:{fontSize:7.5,textColor:[28,25,23],cellPadding:{top:2.5,bottom:2.5,left:3,right:3}},columnStyles:{0:{cellWidth:65},1:{cellWidth:20},2:{cellWidth:22},3:{cellWidth:60}},alternateRowStyles:{fillColor:[r2+(255-r2)*.9,g2+(255-g2)*.9,b2+(255-b2)*.9]},didParseCell:(data)=>{if(data.section==='body'&&data.column.index===1){if(data.cell.raw==='Done')data.cell.styles.textColor=[22,101,52];else if(data.cell.raw==='Pending')data.cell.styles.textColor=[150,150,150];}}});
+    y=doc.lastAutoTable.finalY+5;
+  });
+  if(o.remarks){if(y>265){doc.addPage();y=16;}doc.setFillColor(245,243,239);const rlines=doc.splitTextToSize(o.remarks,W-pad*2-8);doc.roundedRect(pad,y,W-pad*2,4+rlines.length*4,2,2,'F');doc.setFontSize(7.5);doc.setFont('helvetica','bold');doc.setTextColor(100,95,90);doc.text('REMARKS',pad+3,y+3.5);y+=7;doc.setFont('helvetica','normal');doc.setTextColor(60,55,50);doc.text(rlines,pad+3,y);}
+  const pages=doc.internal.getNumberOfPages();
+  for(let i=1;i<=pages;i++){doc.setPage(i);doc.setFillColor(28,25,23);doc.rect(0,287,W,10,'F');doc.setFontSize(7);doc.setTextColor(150,140,120);doc.text('Asha Creations · AI Merchandiser · Confidential',W/2,292,{align:'center'});doc.text('Page '+i+'/'+pages,W-pad,292,{align:'right'});}
+  doc.save('Order_'+o.flowId+'_'+o.style.trim()+'_'+o.color.trim()+'.pdf');
+  addMsg('assistant','📄 PDF downloaded: Order #'+o.flowId);
+}
+
+function exportAllPDF(){
+  if(!window.jspdf){ addMsg('assistant','PDF library loading, please try again.'); return; }
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
+  const W=297,H=210,pad=14;
+  const active=orders.filter(o=>!(o.tasks&&o.tasks['Order Completed']));
+  const tc26=TASK_COLS.filter(t=>t!=='Order Completed'&&t!=='Ex-Factory');
+  const totalQty=active.reduce((s,o)=>s+(parseInt(o.qty)||0),0);
+  const totalDone=active.reduce((a,o)=>a+tc26.filter(t=>o.tasks&&o.tasks[t]&&!String(o.tasks[t]).includes('(planned)')).length,0);
+  const overallPct=active.length*tc26.length?Math.round(totalDone/(active.length*tc26.length)*100):0;
+  const buyers={};
+  active.forEach(o=>{const b=(o.buyer||'Other').trim();if(!buyers[b])buyers[b]={orders:[],qty:0};buyers[b].orders.push(o);buyers[b].qty+=(parseInt(o.qty)||0);});
+  const bList=Object.entries(buyers).sort((a,b2)=>b2[1].qty-a[1].qty);
+  doc.setFillColor(28,25,23);doc.rect(0,0,W,18,'F');
+  doc.setTextColor(255,255,255);doc.setFontSize(11);doc.setFont('helvetica','bold');
+  doc.text('ASHA CREATIONS — Order Status Report',pad,8);
+  doc.setFontSize(8);doc.setFont('helvetica','normal');
+  doc.text(new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'long',year:'numeric'}),W-pad,12,{align:'right'});
+  let y=26;
+  bList.forEach(([buyer,bdata])=>{
+    if(y>170){doc.addPage();y=20;}
+    const rows=bdata.orders.sort((a,b2)=>{const ad=a.exFactory?new Date(a.exFactory):new Date('2099-01-01');const bd=b2.exFactory?new Date(b2.exFactory):new Date('2099-01-01');return ad-bd;}).map(o=>{
+      const d=tc26.filter(t=>o.tasks&&o.tasks[t]&&!String(o.tasks[t]).includes('(planned)')).length;
+      const p=Math.round(d/tc26.length*100)+'%';
+      const next=tc26.find(t=>!o.tasks[t]||String(o.tasks[t]).includes('(planned)'))||'Complete ✓';
+      const dels=getDelays(o);
+      return['#'+o.flowId,o.style.trim(),o.color.trim(),o.product||'—',(o.qty||0).toLocaleString(),(o.exFactory||'—').slice(0,10),p,next.slice(0,30),dels.length>0?dels.length+'':'✓'];
+    });
+    doc.autoTable({startY:y,head:[[{content:buyer,colSpan:9,styles:{fillColor:[28,25,23],textColor:255,fontStyle:'bold',fontSize:9}}],['Flow ID','Style','Color','Product','Qty','Ex-Factory','Progress','Next Task','Delays']],body:rows,margin:{left:pad,right:pad},headStyles:{fontSize:8},bodyStyles:{fontSize:7.5},columnStyles:{0:{cellWidth:16},1:{cellWidth:28},2:{cellWidth:22},3:{cellWidth:24},4:{cellWidth:14},5:{cellWidth:20},6:{cellWidth:16},7:{cellWidth:55},8:{cellWidth:18}},alternateRowStyles:{fillColor:[250,250,248]}});
+    y=doc.lastAutoTable.finalY+8;
+  });
+  const pages=doc.internal.getNumberOfPages();
+  for(let i=1;i<=pages;i++){doc.setPage(i);doc.setFontSize(6.5);doc.setTextColor(180,180,180);doc.text('Asha Creations · Confidential · Page '+i+'/'+pages,W/2,H-4,{align:'center'});}
+  doc.save('Asha_Creations_Report_'+new Date().toISOString().slice(0,10)+'.pdf');
+  addMsg('assistant','📄 PDF report downloaded — '+active.length+' orders.');
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// BACKUP, RESTORE & ACTIVITY LOG
+// ═══════════════════════════════════════════════════════════════
+
+// ── Activity Log ────────────────────────────────────────────
+const ACTIVITY_KEY = 'ai_merch_activity';
+let activityLog = [];
+
+function loadActivity(){
+  try{ const s=localStorage.getItem(ACTIVITY_KEY); if(s) activityLog=JSON.parse(s)||[]; }catch(e){}
+}
+
+function logActivity(action, detail, orderRef){
+  const entry = {
+    id: Date.now(),
+    ts: new Date().toISOString(),
+    user: currentUser || gsUser || 'Unknown',
+    action,
+    detail,
+    orderRef: orderRef || ''
+  };
+  activityLog.unshift(entry);
+  if(activityLog.length > 500) activityLog = activityLog.slice(0, 500); // Keep last 500
+  try{ localStorage.setItem(ACTIVITY_KEY, JSON.stringify(activityLog)); }catch(e){}
+  // Push to Supabase activity table (fire and forget)
+  if(sbEnabled){
+    sbREST('activity_log','POST', entry, 'return=minimal').catch(()=>{});
+  }
+}
+
+// ── Keep-alive ping ──────────────────────────────────────────
+function startKeepAlive(){
+  // Ping Supabase every 3 days to prevent project pausing
+  const PING_KEY = 'ai_merch_last_ping';
+  const lastPing = parseInt(localStorage.getItem(PING_KEY)||'0');
+  const threeDays = 3*24*60*60*1000;
+  if(Date.now() - lastPing > threeDays){
+    sbREST('orders?select=flow_id&limit=1').then(()=>{
+      localStorage.setItem(PING_KEY, String(Date.now()));
+      console.log('Keep-alive ping sent');
+    }).catch(()=>{});
+  }
+  // Schedule next check daily
+  setInterval(()=>{
+    const last = parseInt(localStorage.getItem(PING_KEY)||'0');
+    if(Date.now() - last > threeDays){
+      sbREST('orders?select=flow_id&limit=1').then(()=>localStorage.setItem(PING_KEY,String(Date.now()))).catch(()=>{});
+    }
+  }, 24*60*60*1000);
+}
+
+// ── Download JSON Backup ─────────────────────────────────────
+function downloadBackup(){
+  const backup = {
+    version: 2,
+    exportDate: new Date().toISOString(),
+    exportedBy: currentUser || gsUser,
+    orders: orders,
+    samples: samples,
+    activityLog: activityLog.slice(0, 100)
+  };
+  const json = JSON.stringify(backup, null, 2);
+  const blob = new Blob([json], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'AshaMerch_Backup_'+new Date().toISOString().slice(0,10)+'.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  logActivity('BACKUP', 'Downloaded JSON backup — '+orders.length+' orders');
+  addMsg('assistant', '✅ Backup downloaded!\n'+orders.length+' orders + '+samples.length+' samples saved.\n\nStore this file in Google Drive as your safety copy.');
+}
+
+// ── Restore from JSON Backup ─────────────────────────────────
+function restoreFromBackup(){
+  const input = document.createElement('input');
+  input.type = 'file'; input.accept = '.json';
+  input.onchange = async (e) => {
+    const file = e.target.files[0]; if(!file) return;
+    try{
+      const text = await file.text();
+      const backup = JSON.parse(text);
+      if(!backup.orders || !Array.isArray(backup.orders)){
+        alert('Invalid backup file. Please use a file downloaded from AI Merchandiser.');
+        return;
+      }
+      const confirmed = confirm(
+        'Restore from backup?\n\n'+
+        'Backup date: '+backup.exportDate.slice(0,10)+'\n'+
+        'Orders: '+backup.orders.length+'\n'+
+        'Samples: '+(backup.samples||[]).length+'\n\n'+
+        'This will MERGE with current data (nothing deleted).'
+      );
+      if(!confirmed) return;
+
+      // Merge orders (backup wins for task completions)
+      const localById = {};
+      orders.forEach(o=>localById[o.flowId]=o);
+      let added=0, updated=0;
+      backup.orders.forEach(bo=>{
+        if(!localById[bo.flowId]){
+          orders.push(bo); added++;
+        } else {
+          const local = localById[bo.flowId];
+          // Keep whichever has more completions
+          const bDone = TASK_COLS.filter(t=>bo.tasks&&bo.tasks[t]&&!String(bo.tasks[t]).includes('(planned)')).length;
+          const lDone = TASK_COLS.filter(t=>local.tasks&&local.tasks[t]&&!String(local.tasks[t]).includes('(planned)')).length;
+          if(bDone > lDone){ Object.assign(local, bo); updated++; }
+        }
+      });
+
+      // Merge samples
+      if(backup.samples){
+        const localSById={};samples.forEach(s=>localSById[s.id]=s);
+        backup.samples.forEach(bs=>{
+          if(!localSById[bs.id]) samples.push(bs);
+          else{ const p=localSById[bs.id].photo||''; Object.assign(localSById[bs.id],bs); if(p)localSById[bs.id].photo=p; }
+        });
+      }
+
+      save(); saveSamples();
+
+      // Push restored data to Supabase
+      if(sbEnabled){
+        setSyncUI('Restoring to Supabase...', false, true);
+        let pushed=0;
+        for(const o of orders){ try{ await sbUpsertOrder(o); pushed++; }catch(e){} }
+        setSyncUI('Connected — '+gsUser, true, false);
+      }
+
+      renderList(); renderOrder(); updateStat();
+      logActivity('RESTORE', 'Restored from backup: '+added+' added, '+updated+' updated');
+      addMsg('assistant', '✅ Restore complete!\n+'+added+' orders added\n'+updated+' orders updated\nAll data pushed to Supabase.');
+    }catch(e){
+      alert('Restore failed: '+e.message);
+    }
+  };
+  input.click();
+}
+
+// ── Backup Menu Modal ────────────────────────────────────────
+function showBackupMenu(){
+  const existing = document.getElementById('backupModal'); if(existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'backupModal';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+  overlay.onclick = e => { if(e.target===overlay) overlay.remove(); };
+
+  const box = document.createElement('div');
+  box.style.cssText = 'background:#fff;border-radius:16px;width:440px;max-width:100%;box-shadow:0 24px 64px rgba(0,0,0,.2)';
+  box.onclick = e => e.stopPropagation();
+
+  // Header
+  const hdr = document.createElement('div');
+  hdr.style.cssText = 'background:#1C1917;border-radius:16px 16px 0 0;padding:18px 20px;display:flex;justify-content:space-between;align-items:center';
+  hdr.innerHTML = '<div><div style="font-size:16px;font-weight:700;color:#fff">🔒 Backup & Data Safety</div><div style="font-size:11px;color:rgba(255,255,255,.4);margin-top:2px">Protect your order data</div></div><button onclick="document.getElementById(\'backupModal\').remove()" style="background:rgba(255,255,255,.1);border:none;color:#fff;border-radius:8px;width:30px;height:30px;cursor:pointer;font-size:16px">✕</button>';
+
+  const body = document.createElement('div');
+  body.style.cssText = 'padding:20px;display:flex;flex-direction:column;gap:12px';
+
+  // Status card
+  const status = document.createElement('div');
+  status.style.cssText = 'background:'+(sbEnabled?'#f0fdf4':'#fef2f2')+';border:1px solid '+(sbEnabled?'#86efac':'#fca5a5')+';border-radius:10px;padding:12px 14px;font-size:13px;color:'+(sbEnabled?'#166534':'#991b1b');
+  status.innerHTML = (sbEnabled?'🟢 Supabase connected — data synced across all devices':'🔴 Supabase offline — data stored locally only')+
+    '<div style="font-size:11px;margin-top:4px;opacity:.7">'+orders.length+' orders · '+samples.length+' samples · last saved '+new Date().toLocaleDateString('en-IN')+'</div>';
+
+  // Action buttons
+  const actions = [
+    { icon:'⬇️', title:'Download Backup', desc:'Save complete backup to your device. Store in Google Drive.', fn:'downloadBackup()', color:'#1a6b4a' },
+    { icon:'⬆️', title:'Restore from Backup', desc:'Upload a previous backup file to restore lost data.', fn:'restoreFromBackup()', color:'#1d4ed8' },
+    { icon:'📋', title:'View Activity Log', desc:'See all changes — who did what and when.', fn:'showActivityLog()', color:'#7c3aed' },
+    { icon:'☁️', title:'Force Sync to Supabase', desc:'Push all local data to Supabase right now.', fn:'forcePushAll()', color:'#0369a1' },
+  ];
+
+  actions.forEach(a => {
+    const btn = document.createElement('div');
+    btn.style.cssText = 'display:flex;align-items:center;gap:12px;padding:12px;border:1.5px solid #e4e0da;border-radius:10px;cursor:pointer;transition:all .15s';
+    btn.innerHTML = '<div style="font-size:22px;flex-shrink:0">'+a.icon+'</div><div style="flex:1"><div style="font-size:13px;font-weight:600;color:'+a.color+'">'+a.title+'</div><div style="font-size:11px;color:#888;margin-top:1px">'+a.desc+'</div></div><div style="color:#ccc">›</div>';
+    btn.onmouseenter = ()=>btn.style.borderColor=a.color;
+    btn.onmouseleave = ()=>btn.style.borderColor='#e4e0da';
+    btn.onclick = ()=>{ overlay.remove(); eval(a.fn); };
+    body.appendChild(btn);
+  });
+
+  box.appendChild(hdr);
+  box.appendChild(status);
+  box.appendChild(body);
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+}
+
+// ── Activity Log Modal ───────────────────────────────────────
+function showActivityLog(){
+  const existing = document.getElementById('activityModal'); if(existing) existing.remove();
+  loadActivity();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'activityModal';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+  overlay.onclick = e => { if(e.target===overlay) overlay.remove(); };
+
+  const box = document.createElement('div');
+  box.style.cssText = 'background:#fff;border-radius:16px;width:580px;max-width:100%;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 24px 64px rgba(0,0,0,.2)';
+  box.onclick = e=>e.stopPropagation();
+
+  box.innerHTML = '<div style="background:#1C1917;border-radius:16px 16px 0 0;padding:16px 20px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0"><div style="font-size:15px;font-weight:700;color:#fff">📋 Activity Log</div><button onclick="document.getElementById(\'activityModal\').remove()" style="background:rgba(255,255,255,.1);border:none;color:#fff;border-radius:8px;width:30px;height:30px;cursor:pointer">✕</button></div>';
+
+  const list = document.createElement('div');
+  list.style.cssText = 'overflow-y:auto;flex:1;padding:12px';
+
+  if(activityLog.length === 0){
+    list.innerHTML = '<div style="text-align:center;padding:40px;color:#aaa">No activity recorded yet.<br><small>Actions like completing tasks, adding orders,<br>and backups will appear here.</small></div>';
+  } else {
+    const ACTION_COLORS = {
+      'TASK_DONE':'#166534', 'TASK_UNDONE':'#b45309', 'ORDER_ADDED':'#1d4ed8',
+      'ORDER_EDITED':'#7c3aed', 'SAMPLE_ADDED':'#0369a1', 'BACKUP':'#166534',
+      'RESTORE':'#991b1b', 'LOGIN':'#555'
+    };
+    activityLog.slice(0, 100).forEach(entry => {
+      const item = document.createElement('div');
+      item.style.cssText = 'display:flex;gap:10px;padding:8px 4px;border-bottom:1px solid #f5f5f3;align-items:flex-start';
+      const col = ACTION_COLORS[entry.action]||'#555';
+      const date = new Date(entry.ts);
+      const dateStr = date.toLocaleDateString('en-IN',{day:'2-digit',month:'short'})+' '+date.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+      item.innerHTML =
+        '<div style="width:8px;height:8px;border-radius:50%;background:'+col+';flex-shrink:0;margin-top:5px"></div>'+
+        '<div style="flex:1"><div style="font-size:12px;font-weight:600;color:#1C1917">'+esc(entry.detail)+'</div>'+
+          '<div style="font-size:10px;color:#aaa;margin-top:2px">'+esc(entry.user)+' · '+dateStr+'</div></div>';
+      list.appendChild(item);
+    });
+  }
+
+  box.appendChild(list);
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+}
+
+// ── Force Push All to Supabase ───────────────────────────────
+async function forcePushAll(){
+  if(!sbEnabled){ addMsg('assistant','⚠️ Not connected to Supabase.'); return; }
+  setSyncUI('Pushing all data...', false, true);
+  let pushed=0, failed=0;
+  for(const o of orders){
+    try{ await sbUpsertOrder(o); pushed++; }
+    catch(e){ failed++; }
+  }
+  for(const s of samples){
+    try{ await sbUpsertSample(s); }catch(e){}
+  }
+  setSyncUI('Connected — '+gsUser, true, false);
+  logActivity('FORCE_SYNC', 'Force pushed '+pushed+' orders to Supabase'+(failed?' ('+failed+' failed)':''));
+  addMsg('assistant', '✅ Force sync complete!\n'+pushed+' orders pushed to Supabase.'+(failed?'\n⚠️ '+failed+' failed — check connection.':''));
+}
+
 // ═══════════════════════════════════════
 // EXPORT & UTILS
 // ═══════════════════════════════════════
@@ -2613,6 +3041,7 @@ function exportExcel(){
 }
 
 function resetData(){
+  if(currentRole !== 'admin'){ addMsg('assistant','⛔ Only admin can reset data.'); return; }
   if(!confirm('Reset all progress? This cannot be undone.'))return;
   localStorage.removeItem(STORAGE_KEY);
   localStorage.removeItem(SAMPLES_KEY);
@@ -2750,8 +3179,11 @@ document.getElementById('chatInput').addEventListener('input',function(){this.st
 document.getElementById('searchInput').addEventListener('input',()=>renderList());
 
 // ── Start ──
-init();
 setTimeout(mobInit, 100);
+init();
+if(!checkAuth()){
+  setTimeout(()=>{ const lp=document.getElementById('loginPin'); if(lp)lp.focus(); }, 100);
+}
 </script>
 </body>
 </html>

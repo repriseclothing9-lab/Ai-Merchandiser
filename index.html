@@ -42,7 +42,7 @@
 }
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(--text);height:100vh;overflow:hidden;-webkit-font-smoothing:antialiased}
-.app{display:grid;grid-template-columns:270px 1fr 340px;grid-template-rows:62px auto auto 1fr;height:100vh}
+.app{display:grid;grid-template-columns:290px 1fr 340px;grid-template-rows:62px auto auto 1fr;height:100vh}
 
 /* ── Splash Screen ── */
 #splash{position:fixed;inset:0;background:var(--white);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;transition:opacity .6s ease}
@@ -58,7 +58,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
 @keyframes loadBar{from{width:0}to{width:100%}}
 
 /* ── Topbar ── */
-.topbar{grid-column:1/-1;grid-row:1;background:var(--text);color:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 24px;position:relative;box-shadow:0 2px 12px rgba(0,0,0,.2)}
+.topbar{grid-column:1/-1;grid-row:1;background:var(--text);color:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 24px;position:relative;box-shadow:0 2px 12px rgba(0,0,0,.2);transition:transform .3s ease,opacity .3s ease}
 .topbar h1{font-size:12px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.5)}
 .topbar-right{display:flex;gap:8px;align-items:center}
 .t-stat{font-size:11px;color:rgba(255,255,255,.35);margin-right:4px}
@@ -69,6 +69,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
 .btn-dim{opacity:.4;font-size:11px}
 
 /* ── Sync Banner ── */
+.topbar.hidden{transform:translateY(-100%);opacity:0;pointer-events:none}
 .sync-banner{grid-column:1/-1;grid-row:2;background:#0F1923;color:#fff;padding:7px 24px;display:flex;align-items:center;gap:10px;font-size:11px;border-bottom:1px solid rgba(255,255,255,.06)}
 .sync-dot{width:7px;height:7px;border-radius:50%;background:#374151;flex-shrink:0}
 .sync-dot.on{background:#52B788;box-shadow:0 0 8px rgba(82,183,136,.6)}
@@ -93,7 +94,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
 .fb:hover{border-color:var(--gold);color:var(--gold-dark)}
 .fb.active{background:var(--text);color:#fff;border-color:var(--text)}
 .order-list{overflow-y:auto;flex:1}
-.order-item{padding:12px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:all .15s}
+.order-item{padding:14px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:all .15s}
 .order-item:hover{background:var(--surface2)}
 .order-item.sel{background:linear-gradient(to right,var(--gold-light),#FFFDF7);border-left:3px solid var(--gold);padding-left:13px}
 .oi-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:3px}
@@ -588,7 +589,16 @@ body.role-admin div.admin-only{display:block !important}
 
   <!-- Sidebar -->
   <div class="sidebar">
-    <div class="sb-search"><input id="searchInput" placeholder="Search style, buyer, flow ID..." oninput="renderList()"></div>
+    <div class="sb-search" style="display:flex;gap:6px;align-items:center;padding:10px 12px">
+      <input id="searchInput" placeholder="Search style, buyer, flow ID..." oninput="renderList()" style="flex:1">
+      <select id="sortSelect" onchange="sortMode=this.value;renderList()" style="font-size:11px;padding:4px 6px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text2);cursor:pointer;font-family:inherit;flex-shrink:0" title="Sort orders">
+        <option value="default">↕ Default</option>
+        <option value="ef_asc">📅 EF: Earliest</option>
+        <option value="ef_desc">📅 EF: Latest</option>
+        <option value="added_desc">🆕 Newest</option>
+        <option value="added_asc">🔼 Oldest</option>
+      </select>
+    </div>
     <div class="sb-filters" id="buyerFilters">
       <button class="fb active" onclick="setBuyerFilter('all',this)">All</button>
       <button class="fb" onclick="setBuyerFilter('OWND',this)">OWND</button>
@@ -800,6 +810,23 @@ function init() {
       .then(s => s.getTracks().forEach(t => t.stop()))
       .catch(() => {});
   }
+
+  // Auto-hide topbar on scroll
+  let lastScrollY = 0;
+  const mainPanel = document.getElementById('mainPanel');
+  if(mainPanel){
+    mainPanel.addEventListener('scroll', () => {
+      const topbar = document.querySelector('.topbar');
+      if(!topbar) return;
+      const currentY = mainPanel.scrollTop;
+      if(currentY > 60 && currentY > lastScrollY) {
+        topbar.classList.add('hidden');
+      } else {
+        topbar.classList.remove('hidden');
+      }
+      lastScrollY = currentY;
+    }, {passive: true});
+  }
 }
 
 function save() {
@@ -858,7 +885,27 @@ function renderList() {
   const list = document.getElementById('orderList');
   const filtered = getFiltered();
   if(!filtered.length) { list.innerHTML='<div class="empty-sb">No orders found</div>'; return; }
-  list.innerHTML = filtered.map(o => {
+  // Apply sort
+  const sorted = [...filtered].sort((a,b) => {
+    if(sortMode === 'ef_asc'){
+      const ad = a.exFactory ? new Date(a.exFactory) : new Date('2099-01-01');
+      const bd = b.exFactory ? new Date(b.exFactory) : new Date('2099-01-01');
+      return ad - bd;
+    }
+    if(sortMode === 'ef_desc'){
+      const ad = a.exFactory ? new Date(a.exFactory) : new Date('2099-01-01');
+      const bd = b.exFactory ? new Date(b.exFactory) : new Date('2099-01-01');
+      return bd - ad;
+    }
+    if(sortMode === 'added_desc'){
+      return parseInt(b.flowId) - parseInt(a.flowId);
+    }
+    if(sortMode === 'added_asc'){
+      return parseInt(a.flowId) - parseInt(b.flowId);
+    }
+    return 0; // default: keep Supabase order
+  });
+  list.innerHTML = sorted.map(o => {
     const ri = orders.indexOf(o);
     const isComp = o.tasks && o.tasks['Order Completed'];
     const urg = getOrderUrgency(o);
@@ -2588,6 +2635,7 @@ const AUTH_KEY  = 'ai_merch_auth';
 let currentRole = null;
 let currentUser = '';
 let loginRole = 'admin';
+let sortMode = 'default'; // default | ef_asc | ef_desc | added_desc | added_asc
 
 function selectRole(role){
   loginRole = role;

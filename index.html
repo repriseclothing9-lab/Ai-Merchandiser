@@ -42,7 +42,7 @@
 }
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(--text);height:100vh;overflow:hidden;-webkit-font-smoothing:antialiased}
-.app{display:grid;grid-template-columns:290px 1fr 340px;grid-template-rows:62px auto auto 1fr;height:100vh}
+.app{display:grid;grid-template-columns:290px 1fr;grid-template-rows:62px auto auto 1fr;height:100vh}
 
 /* ── Splash Screen ── */
 #splash{position:fixed;inset:0;background:var(--white);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;transition:opacity .6s ease}
@@ -146,7 +146,11 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
 .empty-main{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;color:var(--text3);font-size:13px;gap:16px}
 
 /* ── Chat ── */
-.chat{grid-column:3;grid-row:4;background:var(--white);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+.chat{position:fixed;bottom:80px;right:20px;width:360px;max-width:95vw;height:520px;background:var(--white);border-radius:16px;box-shadow:0 8px 48px rgba(0,0,0,.18);display:flex;flex-direction:column;overflow:hidden;z-index:500;border:1px solid var(--border);transition:all .3s cubic-bezier(.175,.885,.32,1.275);transform-origin:bottom right}
+.chat.chat-hidden{transform:scale(0) translateY(20px);opacity:0;pointer-events:none}
+.chat-toggle-btn{position:fixed;bottom:20px;right:20px;width:52px;height:52px;border-radius:50%;background:var(--gold);border:none;cursor:pointer;z-index:501;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 20px rgba(201,168,76,.5);transition:transform .2s}
+.chat-toggle-btn:hover{transform:scale(1.1)}
+.chat-toggle-btn.active{background:#1C1917}
 .chat-head{padding:14px 18px;border-bottom:1px solid var(--border);background:var(--text);flex-shrink:0}
 .chat-head p{font-size:13px;font-weight:600;color:#fff}
 .chat-head span{font-size:11px;color:rgba(255,255,255,.4)}
@@ -628,7 +632,7 @@ body.role-admin div.admin-only{display:block !important}
   </div>
 
   <!-- Chat -->
-  <div class="chat">
+  <div class="chat chat-hidden" id="chatPanel">
     <div class="chat-head">
       <p>AI Assistant</p>
       <span>Tell me when you complete a task</span>
@@ -1548,7 +1552,7 @@ let recog=null, isListening=false;
 const MIC_SVG='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>';
 const STOP_SVG='<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>';
 
-function toggleVoice(){
+function toggleVoice(){ openChatIfClosed();
   if(isListening){
     try{recog&&recog.stop();}catch(e){}
     stopVoice();return;
@@ -2819,6 +2823,34 @@ function exportAllPDF(){
 // ═══════════════════════════════════════════════════════════════
 // BACKUP, RESTORE & ACTIVITY LOG
 // ═══════════════════════════════════════════════════════════════
+
+
+// ── Chat Toggle ──────────────────────────────────────────────
+let chatOpen = false;
+function toggleChat(){
+  chatOpen = !chatOpen;
+  const chat = document.getElementById('chatPanel');
+  const btn = document.getElementById('chatToggleBtn');
+  if(chatOpen){
+    chat.classList.remove('chat-hidden');
+    btn.classList.add('active');
+    btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+    // Scroll chat to bottom
+    setTimeout(()=>{
+      const msgs = document.getElementById('chatMessages');
+      if(msgs) msgs.scrollTop = msgs.scrollHeight;
+    }, 100);
+  } else {
+    chat.classList.add('chat-hidden');
+    btn.classList.remove('active');
+    btn.innerHTML = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 1 3 3v4a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>';
+  }
+}
+
+// Open chat when voice button is tapped
+function openChatIfClosed(){
+  if(!chatOpen) toggleChat();
+}
 
 // ── Activity Log ────────────────────────────────────────────
 const ACTIVITY_KEY = 'ai_merch_activity';

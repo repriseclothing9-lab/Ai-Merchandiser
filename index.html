@@ -648,9 +648,9 @@ body.role-admin div.admin-only{display:block !important}
   <!-- Tabs -->
   <div class="tabs">
     <button class="tab active" id="tabOrders" onclick="switchTab('orders')">&#128203; Orders</button>
-    <button class="tab" id="tabSamples" onclick="switchTab(\'samples\')">&#129525; Samples</button>
+    <button class="tab" id="tabSamples" onclick="switchTab('samples')">&#129525; Samples</button>
     <button class="tab" id="tabCapacity" onclick="switchTab('capacity')">&#128202; Capacity</button>
-    <button class="tab" id="tabAlerts" onclick="switchTab(\'alerts\')">&#9888;&#65039; Alerts</button>
+    <button class="tab" id="tabAlerts" onclick="switchTab('alerts')">&#9888;&#65039; Alerts</button>
     <button class="tab" id="tabReport" onclick="switchTab('report')">&#128196; Report</button>
   </div>
 
@@ -1013,8 +1013,13 @@ function goToOrderFromHome(idx){
 
 function selectOrder(idx) {
   selectedIdx = idx;
-  renderList();
-  if(activeTab === 'orders') renderOrder();
+  // Always switch to orders tab to show the order detail
+  if(activeTab !== 'orders') {
+    switchTab('orders');
+  } else {
+    renderList();
+    renderOrder();
+  }
 }
 
 function renderOrderKeepScroll(){

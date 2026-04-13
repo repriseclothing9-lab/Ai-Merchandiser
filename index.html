@@ -528,9 +528,9 @@ body.role-admin div.admin-only{display:block !important}
 .home-quote::after{content:'';position:absolute;top:-30px;right:-30px;width:140px;height:140px;border-radius:50%;background:rgba(201,168,76,.12);pointer-events:none}
 .home-quote-text{font-size:18px;font-weight:800;color:#fff;line-height:1.4;margin-bottom:8px;font-style:italic}
 .home-quote-attr{font-size:10px;color:rgba(201,168,76,.8);font-weight:700;text-transform:uppercase;letter-spacing:.15em}
-.home-header{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;flex-shrink:0;row-gap:10px}
+.home-header{display:flex;flex-direction:column;gap:6px;flex-shrink:0}
 .home-date{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;font-weight:700;margin-bottom:4px}
-.home-greeting{font-size:24px;font-weight:800;color:var(--text);letter-spacing:-.02em}
+.home-greeting{font-size:20px;font-weight:800;color:var(--text);letter-spacing:-.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .home-stats-mini{display:flex;gap:6px;flex-shrink:0}
 .hsm-item{text-align:center;background:var(--white);border:1px solid var(--border);border-radius:8px;padding:7px 10px;min-width:0;box-shadow:0 1px 3px rgba(0,0,0,.04);display:flex;flex-direction:column;gap:2px}
 .hsm-val{font-size:17px;font-weight:800;color:var(--text);line-height:1}
@@ -2883,15 +2883,15 @@ function renderHomeDashboard(panel){
 
   // ── Greeting + Stats ──────────────────────────────────────
   '<div class="home-header">'+
-    '<div>'+
-      '<div class="home-date">'+today.toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'})+'</div>'+
+    '<div class="home-date">'+today.toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'})+'</div>'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:nowrap">'+
       '<div class="home-greeting">Good '+(new Date().getHours()<12?'Morning':new Date().getHours()<17?'Afternoon':'Evening')+', '+(currentUser||gsUser||'Ankush')+'! 👋</div>'+
-    '</div>'+
-    '<div class="home-stats-mini">'+
-      '<div class="hsm-item"><span class="hsm-val">'+active.length+'</span><span class="hsm-lbl">Active</span></div>'+
-      '<div class="hsm-item"><span class="hsm-val" style="color:'+(pct>=50?'#1a6b4a':'#f59e0b')+'">'+pct+'%</span><span class="hsm-lbl">Done</span></div>'+
-      '<div class="hsm-item"><span class="hsm-val" style="color:'+(critical.length>0?'#e53e3e':'#1a6b4a')+'">'+critical.length+'</span><span class="hsm-lbl">Critical</span></div>'+
-      '<div class="hsm-item"><span class="hsm-val">'+efThisWeek.length+'</span><span class="hsm-lbl">EF·Week</span></div>'+
+      '<div class="home-stats-mini">'+
+        '<div class="hsm-item"><span class="hsm-val">'+active.length+'</span><span class="hsm-lbl">Active</span></div>'+
+        '<div class="hsm-item"><span class="hsm-val" style="color:'+(pct>=50?'#1a6b4a':'#f59e0b')+'">'+pct+'%</span><span class="hsm-lbl">Done</span></div>'+
+        '<div class="hsm-item"><span class="hsm-val" style="color:'+(critical.length>0?'#e53e3e':'#1a6b4a')+'">'+critical.length+'</span><span class="hsm-lbl">Critical</span></div>'+
+        '<div class="hsm-item"><span class="hsm-val">'+efThisWeek.length+'</span><span class="hsm-lbl">EF Wk</span></div>'+
+      '</div>'+
     '</div>'+
   '</div>'+
 

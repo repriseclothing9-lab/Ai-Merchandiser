@@ -523,7 +523,33 @@ body.role-admin .btn.admin-only{display:inline-flex !important}
 body.role-admin div.admin-only{display:block !important}
 
 /* ── Home Dashboard ─── */
-.home-dash{padding:24px;overflow-y:auto;height:100%;box-sizing:border-box;background:var(--bg)}
+.home-dash{padding:20px 24px;overflow-y:auto;height:100%;box-sizing:border-box;display:flex;flex-direction:column;gap:16px}
+.home-quote{background:linear-gradient(135deg,#1C1917 0%,#2d2926 60%,#1a1310 100%);border-radius:14px;padding:22px 26px;position:relative;overflow:hidden;flex-shrink:0}
+.home-quote::after{content:'';position:absolute;top:-30px;right:-30px;width:140px;height:140px;border-radius:50%;background:rgba(201,168,76,.12);pointer-events:none}
+.home-quote-text{font-size:18px;font-weight:800;color:#fff;line-height:1.4;margin-bottom:8px;font-style:italic}
+.home-quote-attr{font-size:10px;color:rgba(201,168,76,.8);font-weight:700;text-transform:uppercase;letter-spacing:.15em}
+.home-header{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;flex-shrink:0}
+.home-date{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;font-weight:700;margin-bottom:4px}
+.home-greeting{font-size:24px;font-weight:800;color:var(--text);letter-spacing:-.02em}
+.home-stats-mini{display:flex;gap:8px;flex-shrink:0}
+.hsm-item{text-align:center;background:var(--white);border:1px solid var(--border);border-radius:10px;padding:10px 14px;min-width:62px;box-shadow:0 1px 4px rgba(0,0,0,.04)}
+.hsm-val{font-size:20px;font-weight:800;color:var(--text);line-height:1.1}
+.hsm-lbl{font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-top:3px;font-weight:600}
+.home-cols{display:grid;grid-template-columns:1fr 1fr;gap:14px;flex:1}
+@media(max-width:700px){.home-cols{grid-template-columns:1fr}}
+.hd-card{background:var(--white);border-radius:12px;border:1px solid var(--border);overflow:hidden;box-shadow:0 1px 6px rgba(0,0,0,.05)}
+.hd-card-head{padding:10px 14px;display:flex;justify-content:space-between;align-items:center;font-size:12px;font-weight:700;border-bottom:1px solid var(--border)}
+.hd-red{background:#fef2f2;color:#991b1b;border-color:#fecaca}
+.hd-amber{background:#fffbeb;color:#92400e;border-color:#fde68a}
+.hd-blue{background:#eff6ff;color:#1e40af;border-color:#bfdbfe}
+.hd-green{background:#f0fdf4;color:#166534;border-color:#bbf7d0}
+.hd-card-body{padding:4px 0}
+.hd-order-row{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;cursor:pointer;transition:background .12s;border-bottom:1px solid var(--border);gap:8px}
+.hd-order-row:last-child{border-bottom:none}
+.hd-order-row:hover{background:var(--surface2)}
+.hd-act-row{display:flex;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);align-items:flex-start;transition:background .1s}
+.hd-act-row:hover{background:var(--surface2)}
+.hd-act-row:last-child{border-bottom:none}
 .home-quote{background:linear-gradient(135deg,#1C1917,#2d2926);border-radius:14px;padding:20px 24px;margin-bottom:20px;position:relative;overflow:hidden}
 .home-quote::before{content:'';position:absolute;top:-20px;right:-20px;width:100px;height:100px;border-radius:50%;background:rgba(201,168,76,.15)}
 .home-quote-text{font-size:17px;font-weight:700;color:#fff;line-height:1.4;margin-bottom:6px}
@@ -622,9 +648,9 @@ body.role-admin div.admin-only{display:block !important}
   <!-- Tabs -->
   <div class="tabs">
     <button class="tab active" id="tabOrders" onclick="switchTab('orders')">&#128203; Orders</button>
-    <button class="tab" id="tabSamples" onclick="switchTab('samples')">&#129525; Samples</button>
+    <button class="tab" id="tabSamples" onclick="switchTab(\'samples\')">&#129525; Samples</button>
     <button class="tab" id="tabCapacity" onclick="switchTab('capacity')">&#128202; Capacity</button>
-    <button class="tab" id="tabAlerts" onclick="switchTab('alerts')">&#9888;&#65039; Alerts</button>
+    <button class="tab" id="tabAlerts" onclick="switchTab(\'alerts\')">&#9888;&#65039; Alerts</button>
     <button class="tab" id="tabReport" onclick="switchTab('report')">&#128196; Report</button>
   </div>
 
@@ -2703,159 +2729,181 @@ function renderHomeDashboard(panel){
   const today = new Date(); today.setHours(0,0,0,0);
   const active = orders.filter(o=>!(o.tasks&&o.tasks['Order Completed']));
   const taskCols26 = TASK_COLS.filter(t=>t!=='Order Completed'&&t!=='Ex-Factory');
+  const dq = getDailyQuote();
 
-  // ── Morning Digest ────────────────────────────────────────
+  // Data
   const critical = active.filter(o=>getOrderUrgency(o)==='critical');
-  const warning  = active.filter(o=>getOrderUrgency(o)==='warning');
-
-  // Ex-factory this week
   const efThisWeek = active.filter(o=>{
     if(!o.exFactory) return false;
-    const ef = new Date(o.exFactory); ef.setHours(0,0,0,0);
-    const diff = Math.round((ef-today)/86400000);
-    return diff>=0 && diff<=7;
+    const ef=new Date(o.exFactory); ef.setHours(0,0,0,0);
+    const diff=Math.round((ef-today)/86400000);
+    return diff>=0&&diff<=7;
   }).sort((a,b)=>new Date(a.exFactory)-new Date(b.exFactory));
-
-  // Overdue tasks across all orders
-  const allDelays = [];
-  active.forEach(o=>{
-    getDelays(o).slice(0,2).forEach(d=>allDelays.push({...d,order:o}));
-  });
+  const allDelays=[];
+  active.forEach(o=>getDelays(o).slice(0,3).forEach(d=>allDelays.push({...d,order:o})));
   allDelays.sort((a,b)=>b.daysLate-a.daysLate);
-
-  // Samples pending action
-  const samplesAction = samples.filter(s=>
-    s.status==='Pending Dispatch'||s.status==='Received by Buyer'||s.status==='Revision Required'
-  );
-
-  // ── Activity Feed ─────────────────────────────────────────
+  const samplesAction=samples.filter(s=>['Pending Dispatch','Received by Buyer','Revision Required'].includes(s.status));
+  const totalDone=active.reduce((s,o)=>s+taskCols26.filter(t=>o.tasks&&o.tasks[t]&&!String(o.tasks[t]).includes('(planned)')).length,0);
+  const totalTasks=active.length*taskCols26.length;
+  const pct=totalTasks?Math.round(totalDone/totalTasks*100):0;
   loadActivity();
-  const recentActs = activityLog.slice(0,15);
+  const recentActs=activityLog.slice(0,12);
 
-  // ── Build HTML ────────────────────────────────────────────
-  const digestItems = [];
-
-  if(critical.length>0){
-    digestItems.push(
-      '<div class="digest-item digest-red" onclick="selectOrder(orders.indexOf(critical[0]));renderOrder()">'+
-      '<div class="di-icon">🚨</div>'+
-      '<div class="di-body">'+
-        '<div class="di-title">'+critical.length+' order'+(critical.length>1?'s':'')+' critically delayed</div>'+
-        '<div class="di-sub">'+critical.slice(0,2).map(o=>'#'+o.flowId+' '+o.style.trim()+' '+o.color.trim()).join(' · ')+(critical.length>2?' +more':'')+'</div>'+
+  // Build critical orders list (clickable)
+  const criticalRows = critical.slice(0,5).map(o=>{
+    const ri=orders.indexOf(o);
+    const delays=getDelays(o);
+    const ef=o.exFactory?new Date(o.exFactory):null;
+    const daysLeft=ef?Math.round((ef-today)/86400000):null;
+    return '<div class="hd-order-row" onclick="selectOrder('+ri+');renderOrder()">'+
+      '<div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0">'+
+        '<span style="font-size:10px;color:#e53e3e;font-weight:700;flex-shrink:0">#'+o.flowId+'</span>'+
+        '<span style="font-size:13px;font-weight:600;color:#1C1917;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(o.style.trim())+' '+esc(o.color.trim())+'</span>'+
+        '<span style="font-size:10px;color:#aaa;flex-shrink:0">'+o.buyer+'</span>'+
       '</div>'+
-      '<div class="di-arrow">›</div></div>'
-    );
-  }
-
-  if(efThisWeek.length>0){
-    digestItems.push(
-      '<div class="digest-item digest-amber" onclick="selectOrder(orders.indexOf(efThisWeek[0]));renderOrder()">'+
-      '<div class="di-icon">📦</div>'+
-      '<div class="di-body">'+
-        '<div class="di-title">'+efThisWeek.length+' order'+(efThisWeek.length>1?'s':'')+' ex-factory this week</div>'+
-        '<div class="di-sub">'+efThisWeek.slice(0,2).map(o=>'#'+o.flowId+' '+o.style.trim()+' ('+o.exFactory.slice(0,10)+')').join(' · ')+'</div>'+
+      '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0">'+
+        (daysLeft!==null?'<span style="font-size:10px;font-weight:700;color:'+(daysLeft<0?'#e53e3e':'#f59e0b')+'">'+(daysLeft<0?Math.abs(daysLeft)+'d late':daysLeft+'d left')+'</span>':'')+
+        '<span style="font-size:11px;color:#e53e3e">'+delays.length+' delay'+(delays.length>1?'s':'')+'</span>'+
+        '<span style="color:#ccc">›</span>'+
       '</div>'+
-      '<div class="di-arrow">›</div></div>'
-    );
-  }
-
-  if(allDelays.length>0){
-    digestItems.push(
-      '<div class="digest-item digest-orange">'+
-      '<div class="di-icon">⏰</div>'+
-      '<div class="di-body">'+
-        '<div class="di-title">'+allDelays.length+' overdue task'+(allDelays.length>1?'s':'')+' across orders</div>'+
-        '<div class="di-sub">'+allDelays.slice(0,2).map(d=>d.task+' on '+d.order.style.trim()+' ('+d.daysLate+'d late)').join(' · ')+'</div>'+
-      '</div></div>'
-    );
-  }
-
-  if(samplesAction.length>0){
-    digestItems.push(
-      '<div class="digest-item digest-blue" onclick="switchTab(&quot;samples&quot;)">'+
-      '<div class="di-icon">🧵</div>'+
-      '<div class="di-body">'+
-        '<div class="di-title">'+samplesAction.length+' sample'+(samplesAction.length>1?'s':'')+' need attention</div>'+
-        '<div class="di-sub">'+samplesAction.slice(0,2).map(s=>s.name+' ('+s.status+')').join(' · ')+'</div>'+
-      '</div>'+
-      '<div class="di-arrow">›</div></div>'
-    );
-  }
-
-  if(digestItems.length===0){
-    digestItems.push(
-      '<div class="digest-item digest-green">'+
-      '<div class="di-icon">✅</div>'+
-      '<div class="di-body">'+
-        '<div class="di-title">All on track!</div>'+
-        '<div class="di-sub">No critical delays or urgent actions today.</div>'+
-      '</div></div>'
-    );
-  }
-
-  // Activity feed rows
-  const actRows = recentActs.length>0 ? recentActs.map(a=>{
-    const d = new Date(a.ts);
-    const timeStr = d.toLocaleDateString('en-IN',{day:'2-digit',month:'short'})+' '+
-      d.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
-    const icons = {TASK_DONE:'✅',TASK_UNDONE:'↩️',ORDER_ADDED:'➕',ORDER_EDITED:'✏️',
-      SAMPLE_ADDED:'🧵',BACKUP:'💾',RESTORE:'⬆️',LOGIN:'👤',FORCE_SYNC:'🔄'};
-    const icon = icons[a.action]||'📌';
-    return '<div class="act-row">'+
-      '<span class="act-icon">'+icon+'</span>'+
-      '<div class="act-body">'+
-        '<div class="act-detail">'+esc(a.detail)+'</div>'+
-        '<div class="act-meta">'+esc(a.user)+' · '+timeStr+'</div>'+
-      '</div></div>';
-  }).join('') :
-  '<div style="text-align:center;padding:24px;color:var(--text3);font-size:12px">No activity yet. Actions like completing tasks and adding orders will appear here.</div>';
-
-  // Stats row
-  const totalDone = active.reduce((s,o)=>s+taskCols26.filter(t=>o.tasks&&o.tasks[t]&&!String(o.tasks[t]).includes('(planned)')).length,0);
-  const totalTasks = active.length*taskCols26.length;
-  const pct = totalTasks?Math.round(totalDone/totalTasks*100):0;
-  const totalQty = active.reduce((s,o)=>s+(parseInt(o.qty)||0),0);
-
-  const dq = getDailyQuote();
-  panel.innerHTML =
-    '<div class="home-dash">'+
-
-    // Daily Nike Quote
-    '<div class="home-quote">'+
-      '<div class="home-quote-text">&ldquo;'+dq.q+'&rdquo;</div>'+
-      '<div class="home-quote-attr">— '+dq.a+'</div>'+
-    '</div>'+
-
-    // Header
-    '<div class="home-header">'+
-      '<div>'+
-        '<div class="home-date">'+today.toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'})+'</div>'+
-        '<div class="home-greeting">Good '+(new Date().getHours()<12?'Morning':new Date().getHours()<17?'Afternoon':'Evening')+', '+(currentUser||gsUser||'Ankush')+'! 👋</div>'+
-      '</div>'+
-      '<div class="home-stats-mini">'+
-        '<div class="hsm-item"><span class="hsm-val">'+active.length+'</span><span class="hsm-lbl">Active</span></div>'+
-        '<div class="hsm-item"><span class="hsm-val">'+pct+'%</span><span class="hsm-lbl">Done</span></div>'+
-        '<div class="hsm-item"><span class="hsm-val">'+(critical.length+warning.length)+'</span><span class="hsm-lbl">Delayed</span></div>'+
-      '</div>'+
-    '</div>'+
-
-    // Two column layout
-    '<div class="home-cols">'+
-
-      // Left: Morning Digest
-      '<div class="home-col">'+
-        '<div class="home-col-title">🌅 Today&#39;s Focus</div>'+
-        digestItems.join('')+
-      '</div>'+
-
-      // Right: Activity Feed
-      '<div class="home-col">'+
-        '<div class="home-col-title">📋 Recent Activity</div>'+
-        '<div class="act-feed">'+actRows+'</div>'+
-      '</div>'+
-
-    '</div>'+
     '</div>';
+  }).join('');
+
+  // Build overdue tasks list (clickable)
+  const delayRows = allDelays.slice(0,6).map(d=>{
+    const ri=orders.indexOf(d.order);
+    return '<div class="hd-order-row" onclick="selectOrder('+ri+');renderOrder()">'+
+      '<div style="flex:1;min-width:0">'+
+        '<div style="font-size:12px;font-weight:600;color:#1C1917;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(d.task)+'</div>'+
+        '<div style="font-size:10px;color:#aaa;margin-top:1px">'+esc(d.order.style.trim())+' '+esc(d.order.color.trim())+' · #'+d.order.flowId+'</div>'+
+      '</div>'+
+      '<span style="font-size:11px;font-weight:700;color:#e53e3e;flex-shrink:0">'+d.daysLate+'d late ›</span>'+
+    '</div>';
+  }).join('');
+
+  // Activity icons
+  const AI={TASK_DONE:'✅',TASK_UNDONE:'↩️',ORDER_ADDED:'➕',ORDER_EDITED:'✏️',SAMPLE_ADDED:'🧵',BACKUP:'💾',RESTORE:'⬆️',LOGIN:'👤',FORCE_SYNC:'🔄'};
+  const actRows=recentActs.length>0?recentActs.map(a=>{
+    const d=new Date(a.ts);
+    const ts=d.toLocaleDateString('en-IN',{day:'2-digit',month:'short'})+' '+d.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+    return '<div class="hd-act-row">'+
+      '<span style="font-size:14px;flex-shrink:0">'+(AI[a.action]||'📌')+'</span>'+
+      '<div style="flex:1;min-width:0">'+
+        '<div style="font-size:12px;font-weight:500;color:#1C1917;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(a.detail)+'</div>'+
+        '<div style="font-size:10px;color:#aaa;margin-top:1px">'+esc(a.user)+' · '+ts+'</div>'+
+      '</div>'+
+    '</div>';
+  }).join(''):
+  '<div style="text-align:center;padding:32px 16px;color:#aaa;font-size:12px">Actions will appear here as your team works.</div>';
+
+  panel.innerHTML =
+  '<div class="home-dash">'+
+
+  // ── Nike Quote ────────────────────────────────────────────
+  '<div class="home-quote">'+
+    '<div style="font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:rgba(201,168,76,.6);margin-bottom:10px;font-weight:600">Today&#39;s Motivation</div>'+
+    '<div class="home-quote-text">&ldquo;'+dq.q+'&rdquo;</div>'+
+    '<div class="home-quote-attr">— '+dq.a+'</div>'+
+    '<div style="position:absolute;bottom:0;right:0;font-size:80px;opacity:.04;line-height:1;font-weight:900;color:#fff;pointer-events:none">NIKE</div>'+
+  '</div>'+
+
+  // ── Greeting + Stats ──────────────────────────────────────
+  '<div class="home-header">'+
+    '<div>'+
+      '<div class="home-date">'+today.toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'})+'</div>'+
+      '<div class="home-greeting">Good '+(new Date().getHours()<12?'Morning':new Date().getHours()<17?'Afternoon':'Evening')+', '+(currentUser||gsUser||'Ankush')+'! 👋</div>'+
+    '</div>'+
+    '<div class="home-stats-mini">'+
+      '<div class="hsm-item"><div class="hsm-val">'+active.length+'</div><div class="hsm-lbl">Active</div></div>'+
+      '<div class="hsm-item"><div class="hsm-val" style="color:'+(pct>=50?'#1a6b4a':'#f59e0b')+'">'+pct+'%</div><div class="hsm-lbl">Done</div></div>'+
+      '<div class="hsm-item"><div class="hsm-val" style="color:'+(critical.length>0?'#e53e3e':'#1a6b4a')+'">'+critical.length+'</div><div class="hsm-lbl">Critical</div></div>'+
+      '<div class="hsm-item"><div class="hsm-val">'+efThisWeek.length+'</div><div class="hsm-lbl">This Week EF</div></div>'+
+    '</div>'+
+  '</div>'+
+
+  // ── Two columns ───────────────────────────────────────────
+  '<div class="home-cols">'+
+
+    // LEFT — Focus
+    '<div style="display:flex;flex-direction:column;gap:14px">'+
+
+      // Critical Orders
+      (critical.length>0?
+      '<div class="hd-card">'+
+        '<div class="hd-card-head hd-red">'+
+          '<div style="display:flex;align-items:center;gap:6px">'+
+            '<span>🚨</span>'+
+            '<span>'+critical.length+' Critical Order'+(critical.length>1?'s':'')+'</span>'+
+          '</div>'+
+          '<span style="font-size:10px;opacity:.7">Click to open ›</span>'+
+        '</div>'+
+        '<div class="hd-card-body">'+criticalRows+'</div>'+
+        (critical.length>5?'<div style="padding:8px 14px;font-size:11px;color:#e53e3e;font-weight:600;border-top:1px solid #fee2e2;cursor:pointer" onclick="switchTab(\'alerts\')">View all '+critical.length+' critical orders ›</div>':'')+
+      '</div>':'<div class="hd-card"><div class="hd-card-head hd-green"><span>✅</span><span>No critical delays</span></div></div>')+
+
+      // Overdue tasks
+      (allDelays.length>0?
+      '<div class="hd-card">'+
+        '<div class="hd-card-head hd-amber">'+
+          '<div style="display:flex;align-items:center;gap:6px">'+
+            '<span>⏰</span>'+
+            '<span>'+allDelays.length+' Overdue Task'+(allDelays.length>1?'s':'')+'</span>'+
+          '</div>'+
+          '<span style="font-size:10px;opacity:.7">Click row to open ›</span>'+
+        '</div>'+
+        '<div class="hd-card-body">'+delayRows+'</div>'+
+        (allDelays.length>6?'<div style="padding:8px 14px;font-size:11px;color:#b45309;font-weight:600;border-top:1px solid #fde68a;cursor:pointer" onclick="switchTab(\'alerts\')">View all overdue tasks ›</div>':'')+
+      '</div>':'')+
+
+      // EF this week
+      (efThisWeek.length>0?
+      '<div class="hd-card">'+
+        '<div class="hd-card-head hd-blue">'+
+          '<div style="display:flex;align-items:center;gap:6px"><span>📦</span><span>Ex-Factory This Week</span></div>'+
+        '</div>'+
+        '<div class="hd-card-body">'+efThisWeek.slice(0,3).map(o=>{
+          const ri=orders.indexOf(o);
+          const ef=new Date(o.exFactory); ef.setHours(0,0,0,0);
+          const days=Math.round((ef-today)/86400000);
+          return '<div class="hd-order-row" onclick="selectOrder('+ri+');renderOrder()">'+
+            '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;color:#1C1917;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(o.style.trim())+' '+esc(o.color.trim())+'</div>'+
+            '<div style="font-size:10px;color:#aaa">'+esc(o.buyer)+' · EF: '+o.exFactory.slice(0,10)+'</div></div>'+
+            '<span style="font-size:11px;font-weight:700;color:'+(days===0?'#e53e3e':days<=3?'#f59e0b':'#1a6b4a')+';flex-shrink:0">'+(days===0?'TODAY':days+'d')+'</span>'+
+          '</div>';
+        }).join('')+
+      '</div></div>':'')+
+
+      // Samples
+      (samplesAction.length>0?
+      '<div class="hd-card">'+
+        '<div class="hd-card-head" style="background:#f5f3ff;color:#7c3aed;border-color:#e9d5ff">'+
+          '<div style="display:flex;align-items:center;gap:6px"><span>🧵</span><span>'+samplesAction.length+' Sample'+(samplesAction.length>1?'s':'')+' Need Action</span></div>'+
+          '<span style="font-size:10px;opacity:.7;cursor:pointer" onclick="switchTab(\'samples\')">View ›</span>'+
+        '</div>'+
+        '<div class="hd-card-body">'+samplesAction.slice(0,3).map(s=>
+          '<div class="hd-order-row" onclick="switchTab(\'samples\')">'+
+            '<div style="flex:1"><div style="font-size:12px;font-weight:600;color:#1C1917">'+esc(s.name)+'</div>'+
+            '<div style="font-size:10px;color:#aaa">'+esc(s.buyer||'—')+' · '+esc(s.status)+'</div></div>'+
+            '<span style="font-size:11px;color:#7c3aed">›</span>'+
+          '</div>'
+        ).join('')+
+      '</div></div>':'')+
+
+    '</div>'+
+
+    // RIGHT — Activity
+    '<div style="display:flex;flex-direction:column;gap:14px">'+
+      '<div class="hd-card" style="flex:1">'+
+        '<div class="hd-card-head" style="background:#f8f7f5;color:#555;border-color:var(--border)">'+
+          '<div style="display:flex;align-items:center;gap:6px"><span>📋</span><span>Recent Activity</span></div>'+
+          '<span style="font-size:10px;opacity:.7">'+recentActs.length+' actions</span>'+
+        '</div>'+
+        '<div style="overflow-y:auto;max-height:520px">'+actRows+'</div>'+
+      '</div>'+
+    '</div>'+
+
+  '</div>'+
+  '</div>';
 }
 
 // ═══════════════════════════════════════

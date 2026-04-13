@@ -2724,25 +2724,80 @@ function hideHomepage(){
 // HOME DASHBOARD (default panel view)
 // ═══════════════════════════════════════
 
-const NIKE_QUOTES = [
+const ALL_QUOTES = [
+  // Nike
   {q:"Just Do It.", a:"Nike"},
   {q:"Yesterday you said tomorrow.", a:"Nike"},
-  {q:"Believe in something. Even if it means sacrificing everything.", a:"Nike"},
-  {q:"It's only crazy until you do it.", a:"Nike"},
-  {q:"Don't ask if your dreams are crazy. Ask if they're crazy enough.", a:"Nike"},
-  {q:"You can't stop us.", a:"Nike"},
+  {q:"Impossible is nothing.", a:"Nike — Adidas collab mindset"},
   {q:"There is no finish line.", a:"Nike"},
-  {q:"Winning isn't for everybody. It is for those who work hardest.", a:"Nike"},
-  {q:"The only bad workout is the one that didn't happen.", a:"Nike"},
-  {q:"Don't stop until you're proud.", a:"Nike"},
   {q:"Dream crazier.", a:"Nike"},
+  {q:"You can't stop us.", a:"Nike"},
   {q:"Find your greatness.", a:"Nike"},
-  {q:"Make today count.", a:"Nike"},
-  {q:"You were born to do this.", a:"Nike"},
+  {q:"Winning isn't for everybody. It is for those who work hardest.", a:"Nike"},
+  {q:"Don't stop until you're proud.", a:"Nike"},
+  {q:"Believe in something. Even if it means sacrificing everything.", a:"Nike"},
+  // Steve Jobs
+  {q:"The people who are crazy enough to think they can change the world are the ones who do.", a:"Steve Jobs"},
+  {q:"Your time is limited, so don't waste it living someone else's life.", a:"Steve Jobs"},
+  {q:"Stay hungry, stay foolish.", a:"Steve Jobs"},
+  {q:"Innovation distinguishes between a leader and a follower.", a:"Steve Jobs"},
+  {q:"Quality is more important than quantity. One home run is much better than two doubles.", a:"Steve Jobs"},
+  // Elon Musk
+  {q:"When something is important enough, you do it even if the odds are not in your favor.", a:"Elon Musk"},
+  {q:"Work like hell. I mean you just have to put in 80 to 100 hour weeks every week.", a:"Elon Musk"},
+  {q:"If something is important enough, even if the odds are against you, you should still do it.", a:"Elon Musk"},
+  {q:"Don't be afraid of new arenas.", a:"Elon Musk"},
+  // Jeff Bezos
+  {q:"We are stubborn on vision. We are flexible on details.", a:"Jeff Bezos"},
+  {q:"Your brand is what other people say about you when you're not in the room.", a:"Jeff Bezos"},
+  {q:"If you do build a great experience, customers tell each other about that.", a:"Jeff Bezos"},
+  {q:"Work hard, have fun, make history.", a:"Jeff Bezos — Amazon"},
+  // Warren Buffett
+  {q:"The best investment you can make is in yourself.", a:"Warren Buffett"},
+  {q:"Someone is sitting in the shade today because someone planted a tree long ago.", a:"Warren Buffett"},
+  {q:"Price is what you pay. Value is what you get.", a:"Warren Buffett"},
+  // Coco Chanel
+  {q:"Fashion is not something that exists in dresses only. Fashion is in the sky, in the street.", a:"Coco Chanel"},
+  {q:"In order to be irreplaceable one must always be different.", a:"Coco Chanel"},
+  {q:"Dress shabbily and they remember the dress. Dress impeccably and they remember the woman.", a:"Coco Chanel"},
+  // Virgil Abloh
+  {q:"Everything I do is for the 17-year-old version of myself.", a:"Virgil Abloh"},
+  {q:"My design philosophy is about context — making work that speaks to its moment.", a:"Virgil Abloh"},
+  {q:"Life is so short that every second is a runway.", a:"Virgil Abloh"},
+  // Ralph Lauren
+  {q:"I don't design clothes. I design dreams.", a:"Ralph Lauren"},
+  {q:"Style is very personal. It has nothing to do with fashion.", a:"Ralph Lauren"},
+  // Tom Ford
+  {q:"Dressing is a way of life.", a:"Tom Ford"},
+  {q:"I always say: clean up, dress up and show up.", a:"Tom Ford"},
+  // Zara / Amancio Ortega
+  {q:"The customer has always driven the business model.", a:"Amancio Ortega — Zara"},
+  // General business
+  {q:"The secret of getting ahead is getting started.", a:"Mark Twain"},
+  {q:"It always seems impossible until it's done.", a:"Nelson Mandela"},
+  {q:"Success is not final, failure is not fatal. It is the courage to continue that counts.", a:"Winston Churchill"},
+  {q:"The harder I work, the luckier I get.", a:"Samuel Goldwyn"},
+  {q:"Do or do not. There is no try.", a:"Yoda — Star Wars"},
+  {q:"If you're going through hell, keep going.", a:"Winston Churchill"},
+  {q:"Great things never come from comfort zones.", a:"Roy T. Bennett"},
+  {q:"Push yourself because no one else is going to do it for you.", a:"Unknown"},
+  {q:"The difference between ordinary and extraordinary is that little extra.", a:"Jimmy Johnson"},
+  {q:"Don't wish it were easier, wish you were better.", a:"Jim Rohn"},
+  {q:"Hustle until your haters ask if you're hiring.", a:"Steve Harvey"},
+  {q:"You don't have to be great to start, but you have to start to be great.", a:"Zig Ziglar"},
+  // Fashion-specific
+  {q:"Fashion is the armor to survive the reality of everyday life.", a:"Bill Cunningham"},
+  {q:"Clothes mean nothing until someone lives in them.", a:"Marc Jacobs"},
+  {q:"Fashion is about dressing according to what's fashionable. Style is more about being yourself.", a:"Oscar de la Renta"},
+  {q:"Luxury is not about buying expensive things; it's about living in a space that is free of clutter.", a:"Mario Testino"},
+  {q:"A woman who wears a smile is always in style.", a:"Anonymous"},
+  {q:"In fashion, one day you're in, and the next day you're out.", a:"Heidi Klum"},
+  {q:"Fashion is what you buy. Style is what you do with it.", a:"Anonymous"},
 ];
+
 function getDailyQuote(){
   const dayOfYear = Math.floor((new Date() - new Date(new Date().getFullYear(),0,0))/86400000);
-  return NIKE_QUOTES[dayOfYear % NIKE_QUOTES.length];
+  return ALL_QUOTES[dayOfYear % ALL_QUOTES.length];
 }
 function renderHomeDashboard(panel){
   const today = new Date(); today.setHours(0,0,0,0);

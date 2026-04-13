@@ -521,6 +521,43 @@ body.role-admin .admin-only{display:inline-flex !important}
 body.role-admin button.admin-only{display:inline-flex !important}
 body.role-admin .btn.admin-only{display:inline-flex !important}
 body.role-admin div.admin-only{display:block !important}
+
+/* ── Home Dashboard ─── */
+.home-dash{padding:24px;overflow-y:auto;height:100%;box-sizing:border-box;background:var(--bg)}
+.home-quote{background:linear-gradient(135deg,#1C1917,#2d2926);border-radius:14px;padding:20px 24px;margin-bottom:20px;position:relative;overflow:hidden}
+.home-quote::before{content:'';position:absolute;top:-20px;right:-20px;width:100px;height:100px;border-radius:50%;background:rgba(201,168,76,.15)}
+.home-quote-text{font-size:17px;font-weight:700;color:#fff;line-height:1.4;margin-bottom:6px}
+.home-quote-attr{font-size:11px;color:rgba(201,168,76,.8);font-weight:600;text-transform:uppercase;letter-spacing:.1em}
+.home-header{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;margin-bottom:20px}
+.home-date{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin-bottom:4px}
+.home-greeting{font-size:22px;font-weight:700;color:var(--text)}
+.home-stats-mini{display:flex;gap:10px}
+.hsm-item{text-align:center;background:var(--white);border:1px solid var(--border);border-radius:10px;padding:10px 16px;min-width:64px;box-shadow:var(--shadow)}
+.hsm-val{display:block;font-size:20px;font-weight:700;color:var(--text)}
+.hsm-lbl{display:block;font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-top:2px}
+.home-cols{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:700px){.home-cols{grid-template-columns:1fr}}
+.home-col-title{font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+.digest-item{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:10px;cursor:pointer;transition:all .15s;border:1.5px solid transparent;margin-bottom:8px}
+.digest-item:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,.08)}
+.digest-red{background:#fef2f2;border-color:#fecaca}
+.digest-amber{background:#fffbeb;border-color:#fde68a}
+.digest-orange{background:#fff7ed;border-color:#fed7aa}
+.digest-blue{background:#eff6ff;border-color:#bfdbfe}
+.digest-green{background:#f0fdf4;border-color:#bbf7d0}
+.di-icon{font-size:20px;flex-shrink:0}
+.di-body{flex:1;min-width:0}
+.di-title{font-size:13px;font-weight:600;color:var(--text);margin-bottom:2px}
+.di-sub{font-size:11px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.di-arrow{font-size:16px;color:var(--text3);flex-shrink:0}
+.act-feed{background:var(--white);border:1px solid var(--border);border-radius:10px;overflow:hidden;max-height:380px;overflow-y:auto;box-shadow:var(--shadow)}
+.act-row{display:flex;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);align-items:flex-start;transition:background .1s}
+.act-row:hover{background:var(--surface2)}
+.act-row:last-child{border-bottom:none}
+.act-icon{font-size:14px;flex-shrink:0;margin-top:1px}
+.act-body{flex:1;min-width:0}
+.act-detail{font-size:12px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.act-meta{font-size:10px;color:var(--text3);margin-top:1px}
 </style>
 </head>
 <body>
@@ -2641,6 +2678,27 @@ function hideHomepage(){
 // ═══════════════════════════════════════
 // HOME DASHBOARD (default panel view)
 // ═══════════════════════════════════════
+
+const NIKE_QUOTES = [
+  {q:"Just Do It.", a:"Nike"},
+  {q:"Yesterday you said tomorrow.", a:"Nike"},
+  {q:"Believe in something. Even if it means sacrificing everything.", a:"Nike"},
+  {q:"It's only crazy until you do it.", a:"Nike"},
+  {q:"Don't ask if your dreams are crazy. Ask if they're crazy enough.", a:"Nike"},
+  {q:"You can't stop us.", a:"Nike"},
+  {q:"There is no finish line.", a:"Nike"},
+  {q:"Winning isn't for everybody. It is for those who work hardest.", a:"Nike"},
+  {q:"The only bad workout is the one that didn't happen.", a:"Nike"},
+  {q:"Don't stop until you're proud.", a:"Nike"},
+  {q:"Dream crazier.", a:"Nike"},
+  {q:"Find your greatness.", a:"Nike"},
+  {q:"Make today count.", a:"Nike"},
+  {q:"You were born to do this.", a:"Nike"},
+];
+function getDailyQuote(){
+  const dayOfYear = Math.floor((new Date() - new Date(new Date().getFullYear(),0,0))/86400000);
+  return NIKE_QUOTES[dayOfYear % NIKE_QUOTES.length];
+}
 function renderHomeDashboard(panel){
   const today = new Date(); today.setHours(0,0,0,0);
   const active = orders.filter(o=>!(o.tasks&&o.tasks['Order Completed']));
@@ -2758,8 +2816,15 @@ function renderHomeDashboard(panel){
   const pct = totalTasks?Math.round(totalDone/totalTasks*100):0;
   const totalQty = active.reduce((s,o)=>s+(parseInt(o.qty)||0),0);
 
+  const dq = getDailyQuote();
   panel.innerHTML =
     '<div class="home-dash">'+
+
+    // Daily Nike Quote
+    '<div class="home-quote">'+
+      '<div class="home-quote-text">&ldquo;'+dq.q+'&rdquo;</div>'+
+      '<div class="home-quote-attr">— '+dq.a+'</div>'+
+    '</div>'+
 
     // Header
     '<div class="home-header">'+

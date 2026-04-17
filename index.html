@@ -651,6 +651,7 @@ body.role-admin div.admin-only{display:block !important}
     <button class="tab" id="tabSamples" onclick="switchTab('samples')">&#129525; Samples</button>
     <button class="tab" id="tabCapacity" onclick="switchTab('capacity')">&#128202; Capacity</button>
     <button class="tab" id="tabAlerts" onclick="switchTab('alerts')">&#9888;&#65039; Alerts</button>
+    <button class="tab" id="tabCosting" onclick="switchTab('costing')">🧮 Costing</button>
     <button class="tab" id="tabReport" onclick="switchTab('report')">&#128196; Report</button>
   </div>
 
@@ -1391,7 +1392,7 @@ function delSample(id) {
 // ═══════════════════════════════════════
 function switchTab(tab) {
   activeTab = tab;
-  ['tabOrders','tabSamples','tabCapacity','tabAlerts','tabReport'].forEach(id => {
+  ['tabOrders','tabSamples','tabCapacity','tabAlerts','tabReport','tabCosting'].forEach(id => {
     const el = document.getElementById(id);
     if(el) el.classList.toggle('active', id === 'tab'+tab.charAt(0).toUpperCase()+tab.slice(1));
   });
@@ -1400,6 +1401,7 @@ function switchTab(tab) {
   else if(tab==='capacity') renderCapacity();
   else if(tab==='alerts') renderAlerts();
   else if(tab==='report') renderReport();
+  else if(tab==='costing') renderCosting();
 }
 
 // ═══════════════════════════════════════
@@ -1552,10 +1554,24 @@ function nlp(text) {
     }
   }
 
-  // Info
-  if(/how many|status|pending|total/.test(t)) {
-    const done=orders.reduce((a,o)=>a+TASK_COLS.filter(t2=>o.tasks&&o.tasks[t2]).length,0);
-    return {action:'info',message:orders.length+' orders · '+done+' tasks done'};
+  // Smart task query — "which fabric orders are pending", "show me pending labdips"
+  const taskQuery = findTask(t);
+  if(taskQuery && (/pending|not done|incomplete|which|show|list|who|where|how many/.test(t) || /pending|which|show/.test(t))) {
+    return {action:'task_query', task:taskQuery, filter: /done|complete|finish/.test(t) ? 'done' : 'pending'};
+  }
+
+  // Buyer/style status query
+  if(/status|how many|total|progress/.test(t)) {
+    const ord = findOrder(t);
+    if(ord && (ord !== orders[selectedIdx] || t.includes(ord.style.toLowerCase()))) {
+      const done = TASK_COLS.filter(t2=>ord.tasks&&ord.tasks[t2]&&!String(ord.tasks[t2]).includes('(planned)')).length;
+      const pct = Math.round(done/TASK_COLS.filter(t2=>t2!=='Order Completed').length*100);
+      const next = TASK_COLS.find(t2=>!ord.tasks[t2]||String(ord.tasks[t2]).includes('(planned)'))||'Complete';
+      return {action:'info', message:'#'+ord.flowId+' '+ord.style.trim()+' '+ord.color.trim()+'\n'+done+'/26 tasks ('+pct+'%)\nNext: '+next, orderId:ord.flowId};
+    }
+    const done=orders.reduce((a,o)=>a+TASK_COLS.filter(t2=>o.tasks&&o.tasks[t2]&&!String(o.tasks[t2]).includes('(planned)')).length,0);
+    const active=orders.filter(o=>!(o.tasks&&o.tasks['Order Completed'])).length;
+    return {action:'info',message:active+' active orders · '+done+' tasks done'};
   }
 
   return {action:'none',message:"I didn't catch that. Try:\n• \"Labdips done for SKYLAR Black\"\n• \"All material done for Vic Charcoal\"\n• \"New order — NOVA, Navy, OWND, 800 pcs, ex-factory Sept 15\""};
@@ -2981,6 +2997,340 @@ function renderHomeDashboard(panel){
 
   '</div>'+
   '</div>';
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// COSTING MODULE — Garment Operation Master
+// ═══════════════════════════════════════════════════════════════
+const COSTING_KEY = 'ai_merch_costing_rates_v2';
+
+const GARMENT_TYPES = {
+  polo: {
+    label: 'Polo T-Shirt',
+    ops: [
+      'Front join shoulder','Back join shoulder','Collar knit join / collar making',
+      'Collar attach','Placket mark','Placket make','Placket attach',
+      'Front placket top stitch','Sleeve hem','Sleeve attach','Side seam close',
+      'Side slit make','Side slit tack','Bottom hem','Button hole','Button attach',
+      'Neck tape attach','Label attach','Thread cutting','Checking','Ironing / finishing','Packing'
+    ]
+  },
+  roundneck: {
+    label: 'Round Neck T-Shirt',
+    ops: [
+      'Join shoulder','Neck rib join / neck rib making','Neck rib attach',
+      'Neck top stitch','Sleeve hem','Sleeve attach','Side seam close',
+      'Bottom hem','Neck tape attach','Label attach','Thread cutting',
+      'Checking','Ironing / finishing','Packing'
+    ]
+  },
+  sweatshirt: {
+    label: 'Sweatshirt',
+    ops: [
+      'Join shoulder','Neck rib join / neck rib making','Neck rib attach',
+      'Sleeve attach','Side seam close','Cuff join / cuff making','Cuff attach',
+      'Bottom rib join / waistband rib making','Bottom rib attach',
+      'Neck tape attach','Label attach','Thread cutting','Checking','Ironing / finishing','Packing'
+    ]
+  },
+  hoodie: {
+    label: 'Hoodie',
+    ops: [
+      'Hood panel join','Hood center close','Hood hem / hood fold',
+      'Drawcord eyelet mark','Eyelet fix','Drawcord insert','Hood attach',
+      'Join shoulder','Sleeve attach','Kangaroo pocket mark','Kangaroo pocket hem',
+      'Kangaroo pocket attach','Side seam close','Cuff join / cuff making','Cuff attach',
+      'Bottom rib join / waistband making','Bottom rib attach',
+      'Neck tape attach','Label attach','Thread cutting','Checking','Ironing / finishing','Packing'
+    ]
+  },
+  zipper_hoodie: {
+    label: 'Zipper Hoodie',
+    ops: [
+      'Hood panel join','Hood center close','Hood hem / hood facing finish',
+      'Eyelet mark','Eyelet fix','Drawcord insert','Hood attach',
+      'Join shoulder','Front open make','Zip attach','Zip top stitch',
+      'Sleeve attach','Pocket mark','Fashion cut pocket make / pocket hem',
+      'Pocket attach','Side seam close','Cuff join / cuff making','Cuff attach',
+      'Bottom rib join / waistband making','Bottom rib attach',
+      'Neck tape attach','Label attach','Thread cutting','Checking','Ironing / finishing','Packing'
+    ]
+  }
+};
+
+// Flat list of all unique operations across all types
+const ALL_OPS = [...new Set(Object.values(GARMENT_TYPES).flatMap(t=>t.ops))].sort();
+
+let costingRates = {};  // { 'operation name': rate }
+let costingCalc = { type:'polo', ops:[], qty:100, productName:'', notes:'' };
+
+function loadCostingRates(){
+  try{
+    const s = localStorage.getItem(COSTING_KEY);
+    if(s) costingRates = JSON.parse(s);
+    else costingRates = {};
+  } catch(e){ costingRates = {}; }
+}
+
+function saveCostingRates(){
+  try{ localStorage.setItem(COSTING_KEY, JSON.stringify(costingRates)); }catch(e){}
+  showToast('Rates saved');
+}
+
+function getCostingOpsForType(type){
+  return (GARMENT_TYPES[type]||GARMENT_TYPES.polo).ops;
+}
+
+function renderCosting(){
+  loadCostingRates();
+  const panel = document.getElementById('mainPanel');
+  const currentType = costingCalc.type || 'polo';
+  const typeOps = getCostingOpsForType(currentType);
+  const selectedOps = costingCalc.ops;
+  const qty = parseInt(costingCalc.qty)||0;
+
+  // Totals
+  let totalPerPcs = 0;
+  const breakdown = selectedOps.map(op=>{
+    const rate = parseFloat(costingRates[op])||0;
+    totalPerPcs += rate;
+    return {name:op, rate};
+  });
+  const totalOrder = totalPerPcs * qty;
+
+  // Type selector pills
+  const typePills = Object.entries(GARMENT_TYPES).map(([key,val])=>
+    '<button onclick="setCostingType(this.dataset.t)" data-t="'+key+'" style="padding:6px 14px;border-radius:20px;border:1.5px solid '+(currentType===key?'var(--gold)':'var(--border)')+';background:'+(currentType===key?'var(--gold-light)':'var(--white)')+';color:'+(currentType===key?'var(--gold-dark)':'var(--text2)')+';font-size:12px;font-weight:'+(currentType===key?'700':'500')+';cursor:pointer;font-family:inherit;white-space:nowrap">'+val.label+'</button>'
+  ).join('');
+
+  // Op checkboxes for current type
+  const opChecks = typeOps.map(op=>{
+    const sel = selectedOps.includes(op);
+    const rate = parseFloat(costingRates[op])||0;
+    return '<div onclick="toggleCostOp(this)" data-op="'+esc(op)+'" style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;border:1.5px solid '+(sel?'var(--gold)':'var(--border)')+';background:'+(sel?'var(--gold-light)':'var(--white)')+';cursor:pointer;transition:all .12s;margin-bottom:6px">'+
+      '<div style="width:16px;height:16px;border-radius:4px;border:2px solid '+(sel?'var(--gold)':'#ccc')+';background:'+(sel?'var(--gold)':'transparent')+';display:flex;align-items:center;justify-content:center;flex-shrink:0">'+
+        (sel?'<svg width="9" height="9" viewBox="0 0 9 9"><path d="M1.5 4.5l2 2L7.5 2" stroke="#1C1917" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>':'')+
+      '</div>'+
+      '<span style="flex:1;font-size:12px;font-weight:'+(sel?'600':'400')+';color:var(--text)">'+esc(op)+'</span>'+
+      '<span style="font-size:12px;font-weight:600;color:'+(sel?'var(--gold-dark)':'var(--text3)')+'">'+( rate>0?'₹'+rate.toFixed(2):'—' )+'</span>'+
+    '</div>';
+  }).join('');
+
+  // Select all / clear buttons
+  const allSelected = typeOps.every(op=>selectedOps.includes(op));
+
+  panel.innerHTML =
+  '<div style="display:flex;height:100%;overflow:hidden">'+
+
+  // ── LEFT: Rate Card ────────────────────────────────────────
+  '<div style="width:300px;flex-shrink:0;border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;background:var(--white)">'+
+    '<div style="padding:14px 16px;border-bottom:1px solid var(--border);background:var(--text);flex-shrink:0">'+
+      '<div style="font-size:14px;font-weight:700;color:#fff">⚙️ Operation Rates</div>'+
+      '<div style="font-size:10px;color:rgba(255,255,255,.4);margin-top:2px">Set ₹ rate per operation · saved permanently</div>'+
+    '</div>'+
+    // Search
+    '<div style="padding:8px 12px;border-bottom:1px solid var(--border);flex-shrink:0">'+
+      '<input id="rateSearch" placeholder="Search operation..." oninput="filterRateCard(this.value)" style="width:100%;padding:6px 10px;border-radius:6px;border:1px solid var(--border);font-size:12px;font-family:inherit;box-sizing:border-box">'+
+    '</div>'+
+    '<div style="overflow-y:auto;flex:1" id="rateCardList">'+
+      ALL_OPS.map(op=>
+        '<div class="rate-row" data-op="'+esc(op)+'">'+
+          '<div style="display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1px solid var(--border)">'+
+            '<div style="flex:1;font-size:12px;color:var(--text);min-width:0;white-space:normal;line-height:1.3">'+esc(op)+'</div>'+
+            '<div style="display:flex;align-items:center;gap:3px;flex-shrink:0">'+
+              '<span style="font-size:11px;color:var(--text3)">₹</span>'+
+              (currentRole==='admin'?
+                '<input type="number" min="0" step="0.5" value="'+(parseFloat(costingRates[op])||0)+'" data-op="'+esc(op)+'" onchange="costingRates[this.dataset.op]=parseFloat(this.value)||0" style="width:60px;padding:4px 6px;border-radius:5px;border:1px solid var(--border);font-size:12px;font-weight:600;text-align:right;font-family:inherit;background:var(--surface2)">':
+                '<span style="font-size:13px;font-weight:700;color:var(--text)">'+( parseFloat(costingRates[op])||0 )+'</span>')+
+            '</div>'+
+          '</div>'+
+        '</div>'
+      ).join('')+
+    '</div>'+
+    (currentRole==='admin'?
+    '<div style="padding:10px 14px;border-top:1px solid var(--border);flex-shrink:0">'+
+      '<button onclick="saveCostingRates()" style="width:100%;padding:9px;border-radius:8px;border:none;background:var(--gold);color:#1C1917;cursor:pointer;font-family:inherit;font-size:13px;font-weight:700">💾 Save All Rates</button>'+
+    '</div>':'')+
+  '</div>'+
+
+  // ── RIGHT: Calculator ──────────────────────────────────────
+  '<div style="flex:1;display:flex;flex-direction:column;overflow:hidden">'+
+
+    // Header
+    '<div style="padding:14px 20px;border-bottom:1px solid var(--border);background:var(--white);flex-shrink:0">'+
+      '<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:8px">🧮 Cost Calculator</div>'+
+      '<div style="display:flex;gap:6px;flex-wrap:wrap">'+typePills+'</div>'+
+    '</div>'+
+
+    '<div style="flex:1;overflow-y:auto;display:flex;gap:0">'+
+
+      // Op list
+      '<div style="width:340px;flex-shrink:0;border-right:1px solid var(--border);padding:12px;overflow-y:auto">'+
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'+
+          '<span style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">'+GARMENT_TYPES[currentType].label+' Operations</span>'+
+          '<div style="display:flex;gap:6px">'+
+            '<button onclick="selectAllCostOps()" style="font-size:10px;padding:3px 8px;border-radius:5px;border:1px solid var(--border);background:var(--surface2);cursor:pointer;font-family:inherit">All</button>'+
+            '<button onclick="clearAllCostOps()" style="font-size:10px;padding:3px 8px;border-radius:5px;border:1px solid var(--border);background:var(--surface2);cursor:pointer;font-family:inherit">Clear</button>'+
+          '</div>'+
+        '</div>'+
+        opChecks+
+      '</div>'+
+
+      // Result panel
+      '<div style="flex:1;padding:16px;display:flex;flex-direction:column;gap:14px;overflow-y:auto">'+
+
+        // Inputs
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'+
+          '<div>'+
+            '<label style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;display:block;margin-bottom:4px">Style / Product</label>'+
+            '<input id="costProductName" value="'+esc(costingCalc.productName)+'" placeholder="e.g. NOVA Polo" oninput="costingCalc.productName=this.value" style="width:100%;padding:8px 10px;border-radius:7px;border:1.5px solid var(--border);font-size:13px;font-family:inherit;box-sizing:border-box">'+
+          '</div>'+
+          '<div>'+
+            '<label style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;display:block;margin-bottom:4px">Order Qty (pcs)</label>'+
+            '<input id="costQty" type="number" value="'+costingCalc.qty+'" min="1" oninput="costingCalc.qty=parseInt(this.value)||100;renderCosting()" style="width:100%;padding:8px 10px;border-radius:7px;border:1.5px solid var(--border);font-size:13px;font-family:inherit;box-sizing:border-box">'+
+          '</div>'+
+        '</div>'+
+
+        // Breakdown
+        (breakdown.length>0?
+        '<div style="background:var(--white);border:1.5px solid var(--border);border-radius:10px;overflow:hidden">'+
+          '<div style="padding:10px 14px;background:var(--surface2);border-bottom:1px solid var(--border);font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">Cost Breakdown · '+breakdown.length+' operations</div>'+
+          '<div style="max-height:280px;overflow-y:auto">'+
+          breakdown.map((op,i)=>
+            '<div style="display:flex;justify-content:space-between;padding:8px 14px;border-bottom:1px solid var(--border);background:'+(i%2===0?'transparent':'var(--surface2)')+'">'+
+              '<span style="font-size:12px;color:var(--text)">'+esc(op.name)+'</span>'+
+              '<span style="font-size:12px;font-weight:600;color:var(--text)">₹'+op.rate.toFixed(2)+'</span>'+
+            '</div>'
+          ).join('')+
+          '</div>'+
+          '<div style="display:flex;justify-content:space-between;padding:11px 14px;background:var(--surface2);border-top:1px solid var(--border)">'+
+            '<span style="font-size:13px;font-weight:700;color:var(--text)">CMT per piece</span>'+
+            '<span style="font-size:15px;font-weight:800;color:var(--gold-dark)">₹'+totalPerPcs.toFixed(2)+'</span>'+
+          '</div>'+
+        '</div>':
+        '<div style="text-align:center;padding:32px;color:var(--text3);font-size:12px;background:var(--surface2);border-radius:10px;border:1px dashed var(--border)">Select operations from the left to see breakdown</div>')+
+
+        // Total order card
+        (breakdown.length>0?
+        '<div style="background:linear-gradient(135deg,#1C1917,#2d2926);border-radius:12px;padding:18px 20px;display:flex;justify-content:space-between;align-items:center">'+
+          '<div>'+
+            '<div style="font-size:10px;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px">Total Order Cost</div>'+
+            '<div style="font-size:12px;color:rgba(255,255,255,.5)">'+qty.toLocaleString()+' pcs × ₹'+totalPerPcs.toFixed(2)+'</div>'+
+          '</div>'+
+          '<span style="font-size:24px;font-weight:800;color:var(--gold)">₹'+totalOrder.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})+'</span>'+
+        '</div>':'')+ 
+
+        // Notes + Export
+        '<div style="display:flex;gap:10px;align-items:flex-end">'+
+          '<div style="flex:1">'+
+            '<label style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;display:block;margin-bottom:4px">Notes</label>'+
+            '<input id="costNotes" value="'+esc(costingCalc.notes)+'" placeholder="e.g. OWND SS26 costing..." oninput="costingCalc.notes=this.value" style="width:100%;padding:8px 10px;border-radius:7px;border:1.5px solid var(--border);font-size:13px;font-family:inherit;box-sizing:border-box">'+
+          '</div>'+
+          '<button onclick="resetCostCalc()" style="padding:8px 14px;border-radius:7px;border:1.5px solid var(--border);background:var(--white);color:var(--text2);cursor:pointer;font-family:inherit;font-size:12px;white-space:nowrap">Clear</button>'+
+          '<button onclick="exportCostSheet()" style="padding:8px 16px;border-radius:7px;border:none;background:var(--gold);color:#1C1917;cursor:pointer;font-family:inherit;font-size:13px;font-weight:700;white-space:nowrap">📊 Export</button>'+
+        '</div>'+
+
+      '</div>'+
+    '</div>'+
+  '</div>'+
+
+  '</div>';
+}
+
+function filterRateCard(q){
+  const rows = document.querySelectorAll('.rate-row');
+  q = q.toLowerCase();
+  rows.forEach(row=>{
+    row.style.display = row.dataset.op.toLowerCase().includes(q)?'':'none';
+  });
+}
+
+function setCostingType(type){
+  costingCalc.type = type;
+  costingCalc.ops = [];
+  renderCosting();
+}
+
+function toggleCostOp(el){
+  const op = el.dataset.op;
+  if(costingCalc.ops.includes(op)){
+    costingCalc.ops = costingCalc.ops.filter(x=>x!==op);
+  } else {
+    costingCalc.ops.push(op);
+  }
+  renderCosting();
+}
+
+function selectAllCostOps(){
+  costingCalc.ops = [...getCostingOpsForType(costingCalc.type)];
+  renderCosting();
+}
+
+function clearAllCostOps(){
+  costingCalc.ops = [];
+  renderCosting();
+}
+
+function resetCostCalc(){
+  costingCalc = {type:'polo', ops:[], qty:100, productName:'', notes:''};
+  renderCosting();
+}
+
+function saveAndToastRates(){
+  saveCostingRates();
+}
+
+function showToast(msg){
+  const existing = document.getElementById('toastMsg');
+  if(existing) existing.remove();
+  const t = document.createElement('div');
+  t.id = 'toastMsg';
+  t.style.cssText = 'position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:#1C1917;color:#fff;padding:10px 20px;border-radius:20px;font-size:13px;font-weight:600;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,.2);pointer-events:none;transition:opacity .3s';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(()=>{t.style.opacity='0';setTimeout(()=>t.remove(),300);}, 2000);
+}
+
+function exportCostSheet(){
+  loadCostingRates();
+  const qty = parseInt(costingCalc.qty)||0;
+  const title = costingCalc.productName || GARMENT_TYPES[costingCalc.type].label;
+  const date = new Date().toLocaleDateString('en-IN');
+  let totalPerPcs = 0;
+  const rows = costingCalc.ops.map(op=>{
+    const rate = parseFloat(costingRates[op])||0;
+    totalPerPcs += rate;
+    return [op, 'per pcs', '₹'+rate.toFixed(2)];
+  });
+  rows.push(['','','']);
+  rows.push(['Total CMT per pcs','','₹'+totalPerPcs.toFixed(2)]);
+  rows.push(['Order Qty','',qty.toLocaleString()+' pcs']);
+  rows.push(['Total Order CMT','','₹'+(totalPerPcs*qty).toFixed(2)]);
+
+  if(window.XLSX){
+    const ws = XLSX.utils.aoa_to_sheet([
+      ['ASHA CREATIONS — Garment Costing Sheet'],
+      ['Style: '+title+' | Type: '+GARMENT_TYPES[costingCalc.type].label+' | Date: '+date],
+      costingCalc.notes?['Notes: '+costingCalc.notes]:[],
+      [],
+      ['Operation','Unit','Rate'],
+      ...rows
+    ]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Costing');
+    XLSX.writeFile(wb, 'Costing_'+title.replace(/ /g,'_')+'_'+date+'.xlsx');
+    showToast('📊 Excel exported!');
+  } else {
+    const header = ['Operation','Unit','Rate'];
+    const csv = [['ASHA CREATIONS'], [title+' | '+date], [], header, ...rows].map(r=>r.join(",")).join("\n");
+    const blob = new Blob([csv],{type:'text/csv'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'Costing_'+title.replace(/ /g,'_')+'.csv';
+    a.click();
+    showToast('📊 CSV exported!');
+  }
 }
 
 // ═══════════════════════════════════════

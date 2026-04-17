@@ -1445,6 +1445,19 @@ function send() {
   },400);
 }
 
+
+function buildChatOrderRow(o, ri){
+  const ef = o.exFactory ? ' · EF: '+o.exFactory.slice(0,10) : '';
+  const d = document.createElement('div');
+  d.className = 'hd-order-row';
+  d.innerHTML =
+    '<span style="font-size:11px;font-weight:700;color:#e53e3e;margin-right:6px">#'+o.flowId+'</span>'+
+    '<span style="font-size:13px;font-weight:600;color:var(--text)">'+esc(o.style.trim())+' '+esc(o.color.trim())+'</span> '+
+    '<span style="font-size:11px;color:var(--text3)">'+esc(o.buyer)+ef+'</span>';
+  d.onclick = function(){ selectOrder(ri); setTimeout(toggleChat, 50); };
+  return d.outerHTML;
+}
+
 function handleResult(r) {
   if(r.action==='complete'&&r.updates&&r.updates.length){
     const done=[];
@@ -1468,6 +1481,32 @@ function handleResult(r) {
     if(activeTab==='samples') renderSamples();
     if(syncEnabled) gsPost({action:'addSample',sample:s}).catch(()=>{});
     addMsg('assistant',r.message||'✓ Sample added: '+s.name);
+  } else if(r.action==='task_query'){
+    const task = r.task;
+    const filter = r.filter || 'pending';
+    const active = orders.filter(o=>!(o.tasks&&o.tasks['Order Completed']));
+    let matched;
+    if(filter==='pending'){
+      matched = active.filter(o=>!o.tasks[task]||String(o.tasks[task]).includes('(planned)'));
+    } else {
+      matched = active.filter(o=>o.tasks[task]&&!String(o.tasks[task]).includes('(planned)'));
+    }
+    if(matched.length===0){
+      addMsg('assistant', filter==='pending' ? '✅ All orders have '+task+' done!' : '❌ No orders have '+task+' completed yet.');
+    } else {
+      const rows = matched.slice(0,15).map(o=>{
+        const ri = orders.indexOf(o);
+        const ef = o.exFactory ? ' · EF: '+o.exFactory.slice(0,10) : '';
+        return buildChatOrderRow(o, ri);
+      }).join('');
+      const more = matched.length>15 ? '<div style="font-size:11px;color:var(--text3);margin-top:4px;padding:4px 0">+' + (matched.length-15) + ' more</div>' : '';
+      addMsgHtml('assistant',
+        '<div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--border)">'+(filter==='pending'?'⏳':'✅')+' <b>'+task+'</b> — '+matched.length+' order'+(matched.length>1?'s':'')+' '+(filter==='pending'?'pending':'done')+'</div>'+
+        rows+more
+      );
+    }
+  } else if(r.action==='info'){
+    addMsg('assistant', r.message||'');
   } else {
     addMsg('assistant',r.message||"I didn't catch that. Try: \"Labdips done for SKYLAR Black\"");
   }

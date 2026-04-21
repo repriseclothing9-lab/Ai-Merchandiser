@@ -958,6 +958,8 @@ function setBuyerFilter(f, btn) {
 
 function renderList() {
   const list = document.getElementById('orderList');
+  const _sb = list ? list.parentElement : null;
+  const _sbScroll = _sb ? _sb.scrollTop : 0;
   const filtered = getFiltered();
   if(!filtered.length) { list.innerHTML='<div class="empty-sb">No orders found</div>'; return; }
   // Apply sort
@@ -997,6 +999,7 @@ function renderList() {
       '<div class="progress-bar"><div class="progress-fill" style="width:'+pct+'%"></div></div>'+
       '</div>';
   }).join('');
+  requestAnimationFrame(()=>{ if(_sb) _sb.scrollTop = _sbScroll; });
   updateStat();
 }
 
@@ -2054,12 +2057,21 @@ function startRealtime(){
         });
       }
       if(changed){save();saveSamples();renderList();updateStat();
+        // Save scroll position before re-render
+        const _panel = document.getElementById('mainPanel');
+        const _scrollEl = _panel ? (_panel.querySelector('.tasks-scroll') || _panel) : null;
+        const _scrollTop = _scrollEl ? _scrollEl.scrollTop : 0;
         if(activeTab==='orders')renderOrder();
         else if(activeTab==='samples')renderSamples();
         else if(activeTab==='capacity')renderCapacity();
         else if(activeTab==='alerts')renderAlerts();
         else if(activeTab==='report')renderReport();
         else if(activeTab==='costing')renderCosting();
+        // Restore scroll position after re-render
+        requestAnimationFrame(()=>{
+          const _s = _panel ? (_panel.querySelector('.tasks-scroll') || _panel) : null;
+          if(_s) _s.scrollTop = _scrollTop;
+        });
       }
     }catch(e){}
   },10000);

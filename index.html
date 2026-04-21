@@ -2680,10 +2680,19 @@ function showEditOrder(idx){
     o.deadline=o.exFactory;
     o.merchant=document.getElementById('eo-merchant').value.trim();
     save(); renderOrder(); renderList(); modal.remove();
-    // Force push to Supabase using sbEnabled (not syncEnabled)
-    if(sbEnabled) sbUpsertOrder(o).catch(()=>{});
     logActivity('ORDER_EDITED', 'Edited '+o.style.trim()+' '+o.color.trim()+' — EF: '+(o.exFactory||'—'), '#'+o.flowId);
-    addMsg('assistant','✅ Order updated: '+o.style+' '+o.color+'\nEF: '+(o.exFactory||'—'));
+    if(sbEnabled){
+      showToast('Saving to Supabase...');
+      sbUpsertOrder(o).then(()=>{
+        showToast('✅ Saved to Supabase!');
+        addMsg('assistant','✅ '+o.style+' '+o.color+' updated & synced.\nEF: '+(o.exFactory||'—'));
+      }).catch(err=>{
+        showToast('❌ Sync failed: '+String(err.message||err).slice(0,50));
+        addMsg('assistant','⚠️ Order saved locally but Supabase sync failed:\n'+String(err.message||err)+'\n\nTap Backup → Force Sync to retry.');
+      });
+    } else {
+      addMsg('assistant','✅ Order updated locally.\nEF: '+(o.exFactory||'—')+'\n(Not connected to Supabase)');
+    }
   };
 }
 

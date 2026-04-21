@@ -1815,20 +1815,42 @@ async function sbREST(path, method='GET', body=null, prefer=null){
 }
 
 
-async function sbWrite(path, body, prefer){
+
+async function sbPatch(path, body){
   return new Promise((resolve, reject)=>{
     const url = SB_URL+'/rest/v1/'+path+(path.includes('?')?'&':'?')+'apikey='+SB_KEY;
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', url, true);
+    xhr.open('PATCH', url, true);
     xhr.setRequestHeader('Content-Type','application/json');
-    if(prefer) xhr.setRequestHeader('Prefer', prefer);
+    xhr.setRequestHeader('Prefer','return=minimal');
     xhr.timeout = 15000;
     xhr.onload = ()=>{
+      console.log('sbPatch', xhr.status, path.split('?')[0]);
       if(xhr.status>=200&&xhr.status<300){ resolve(null); }
-      else { console.warn('sbWrite',xhr.status,xhr.responseText.slice(0,80)); reject(new Error(xhr.status+': '+xhr.responseText.slice(0,80))); }
+      else { reject(new Error(xhr.status+': '+xhr.responseText.slice(0,120))); }
     };
-    xhr.onerror = ()=>reject(new Error('Network error on write'));
-    xhr.ontimeout = ()=>reject(new Error('Timeout on write'));
+    xhr.onerror = ()=>reject(new Error('Network error'));
+    xhr.ontimeout = ()=>reject(new Error('Timeout'));
+    xhr.send(JSON.stringify(body));
+  });
+}
+
+async function sbWrite(path, body, prefer){
+  return new Promise((resolve, reject)=>{
+    const url = SB_URL+'/rest/v1/'+path+(path.includes('?')?'&':'?')+'apikey='+SB_KEY;
+    console.log('sbWrite POST:', url.replace(SB_KEY,'***'));
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url, true);
+    xhr.setRequestHeader('Content-Type','application/json');
+    xhr.setRequestHeader('Prefer', prefer||'resolution=merge-duplicates,return=minimal');
+    xhr.timeout = 15000;
+    xhr.onload = ()=>{
+      console.log('sbWrite response:', xhr.status, xhr.responseText.slice(0,100));
+      if(xhr.status>=200&&xhr.status<300){ resolve(null); }
+      else { reject(new Error(xhr.status+': '+xhr.responseText.slice(0,120))); }
+    };
+    xhr.onerror = (e)=>{ console.error('sbWrite onerror:', e); reject(new Error('XHR network error')); };
+    xhr.ontimeout = ()=>reject(new Error('Timeout after 15s'));
     xhr.send(JSON.stringify(body));
   });
 }
@@ -2702,6 +2724,9 @@ function showEditOrder(idx){
     o.orderDate=document.getElementById('eo-odate').value;
     o.exFactory=document.getElementById('eo-ef').value;
     o.deadline=o.exFactory;
+    // Keep Ex-Factory task in sync with the edited date
+    if(!o.tasks) o.tasks={};
+    if(o.exFactory) o.tasks['Ex-Factory'] = o.exFactory;
     o.merchant=document.getElementById('eo-merchant').value.trim();
     save(); renderOrder(); renderList(); modal.remove();
     logActivity('ORDER_EDITED', 'Edited '+o.style.trim()+' '+o.color.trim()+' — EF: '+(o.exFactory||'—'), '#'+o.flowId);

@@ -1771,6 +1771,7 @@ const SB_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsIn
 let sbEnabled = false;
 let sbClient  = null;
 let pollTimer = null;
+let activeCapMonth = null;
 let gsUrl = '';
 let gsUser = localStorage.getItem('ai_merch_gs_user') || 'User';
 let syncEnabled = false;
@@ -2061,9 +2062,9 @@ function startRealtime(){
         const _panel = document.getElementById('mainPanel');
         const _scrollEl = _panel ? (_panel.querySelector('.tasks-scroll') || _panel) : null;
         const _scrollTop = _scrollEl ? _scrollEl.scrollTop : 0;
-        if(activeTab==='orders')renderOrder();
+        if(activeTab==='orders')renderOrderKeepScroll();
         else if(activeTab==='samples')renderSamples();
-        else if(activeTab==='capacity')renderCapacity();
+        else if(activeTab==='capacity'){ if(activeCapMonth) showMonthOrders(activeCapMonth); else renderCapacity(); }
         else if(activeTab==='alerts')renderAlerts();
         else if(activeTab==='report')renderReport();
         else if(activeTab==='costing')renderCosting();
@@ -2234,6 +2235,7 @@ function bColor(b){
 // CAPACITY DASHBOARD
 // ═══════════════════════════════════════
 function renderCapacity(){
+  activeCapMonth = null;
   const panel=document.getElementById('mainPanel');
   const activeOrders=orders.filter(o=>!(o.tasks&&o.tasks['Order Completed']));
   const buckets={};
@@ -2325,6 +2327,7 @@ function renderCapacity(){
 }
 
 function showMonthOrders(monthKey){
+  activeCapMonth = monthKey;
   const mo=orders.filter(o=>{
     const raw=o.exFactory||o.deadline; if(!raw) return false;
     const d=new Date(raw.replace(' ','T')); if(isNaN(d.getTime())) return false;

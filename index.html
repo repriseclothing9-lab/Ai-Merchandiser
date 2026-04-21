@@ -2053,7 +2053,14 @@ function startRealtime(){
           else{const loc=lsById[fresh.id];const p=loc.photo||'';Object.assign(loc,fresh);if(p)loc.photo=p;}
         });
       }
-      if(changed){save();saveSamples();renderList();renderOrder();updateStat();}
+      if(changed){save();saveSamples();renderList();updateStat();
+        if(activeTab==='orders')renderOrder();
+        else if(activeTab==='samples')renderSamples();
+        else if(activeTab==='capacity')renderCapacity();
+        else if(activeTab==='alerts')renderAlerts();
+        else if(activeTab==='report')renderReport();
+        else if(activeTab==='costing')renderCosting();
+      }
     }catch(e){}
   },10000);
 }

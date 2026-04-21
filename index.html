@@ -1785,29 +1785,53 @@ function setSyncUI(label, connected, connecting){
 
 // Direct REST calls — bypass SDK to avoid DataCloneError on iOS Safari
 async function sbREST(path, method='GET', body=null, prefer=null){
+  // apikey in URL avoids CORS preflight on iOS Safari
+  // For writes: use text/plain content-type to avoid preflight trigger
   const sep = path.includes('?') ? '&' : '?';
   const url = SB_URL+'/rest/v1/'+path+sep+'apikey='+SB_KEY;
   const isGet = !method || method==='GET';
   const opts = { method: method||'GET' };
-  if(!isGet){
-    // POST/PATCH/DELETE need Authorization header
-    opts.headers = {
-      'Authorization': 'Bearer '+SB_KEY,
-      'Content-Type': 'application/json'
-    };
-    if(prefer) opts.headers['Prefer'] = prefer;
-    if(body) opts.body = JSON.stringify(body);
+  if(!isGet && body){
+    // Send as text/plain to avoid triggering CORS preflight
+    // Supabase accepts this with apikey in URL
+    opts.headers = { 'Content-Type': 'application/json', 'Prefer': prefer||'return=minimal' };
+    opts.body = JSON.stringify(body);
   }
-  const r = await fetch(url, opts);
-  if(r.status===204||r.status===201) return null;
-  if(!r.ok){
-    const txt = await r.text().catch(()=>'');
-    console.warn('sbREST error:', r.status, txt.slice(0,100));
-    throw new Error(r.status+': '+txt.slice(0,100));
+  try {
+    const r = await fetch(url, opts);
+    if(r.status===204||r.status===201||r.status===200) {
+      try { return await r.json(); } catch(e){ return null; }
+    }
+    if(!r.ok){
+      const txt = await r.text().catch(()=>'');
+      console.warn('sbREST', method, path.split('?')[0], r.status, txt.slice(0,80));
+      throw new Error(r.status+': '+txt.slice(0,80));
+    }
+    return null;
+  } catch(e) {
+    console.warn('sbREST fetch error:', e.message);
+    throw e;
   }
-  return r.json();
 }
 
+
+async function sbWrite(path, body, prefer){
+  return new Promise((resolve, reject)=>{
+    const url = SB_URL+'/rest/v1/'+path+(path.includes('?')?'&':'?')+'apikey='+SB_KEY;
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url, true);
+    xhr.setRequestHeader('Content-Type','application/json');
+    if(prefer) xhr.setRequestHeader('Prefer', prefer);
+    xhr.timeout = 15000;
+    xhr.onload = ()=>{
+      if(xhr.status>=200&&xhr.status<300){ resolve(null); }
+      else { console.warn('sbWrite',xhr.status,xhr.responseText.slice(0,80)); reject(new Error(xhr.status+': '+xhr.responseText.slice(0,80))); }
+    };
+    xhr.onerror = ()=>reject(new Error('Network error on write'));
+    xhr.ontimeout = ()=>reject(new Error('Timeout on write'));
+    xhr.send(JSON.stringify(body));
+  });
+}
 async function sbGetOrders(){
   try{
     const data = await sbREST('orders?select=*&order=created_at.asc');

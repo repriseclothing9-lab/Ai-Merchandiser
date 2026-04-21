@@ -1785,19 +1785,24 @@ function setSyncUI(label, connected, connecting){
 
 // Direct REST calls — bypass SDK to avoid DataCloneError on iOS Safari
 async function sbREST(path, method='GET', body=null, prefer=null){
-  // Always put apikey in URL — avoids CORS preflight on all browsers including iOS Safari
   const sep = path.includes('?') ? '&' : '?';
   const url = SB_URL+'/rest/v1/'+path+sep+'apikey='+SB_KEY;
+  const isGet = !method || method==='GET';
   const opts = { method: method||'GET' };
-  if(body){
-    opts.headers = { 'Content-Type': 'application/json' };
+  if(!isGet){
+    // POST/PATCH/DELETE need Authorization header
+    opts.headers = {
+      'Authorization': 'Bearer '+SB_KEY,
+      'Content-Type': 'application/json'
+    };
     if(prefer) opts.headers['Prefer'] = prefer;
-    opts.body = JSON.stringify(body);
+    if(body) opts.body = JSON.stringify(body);
   }
   const r = await fetch(url, opts);
-  if(r.status === 204 || r.status === 201) return null;
+  if(r.status===204||r.status===201) return null;
   if(!r.ok){
     const txt = await r.text().catch(()=>'');
+    console.warn('sbREST error:', r.status, txt.slice(0,100));
     throw new Error(r.status+': '+txt.slice(0,100));
   }
   return r.json();

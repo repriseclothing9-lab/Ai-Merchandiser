@@ -1772,6 +1772,7 @@ let sbEnabled = false;
 let sbClient  = null;
 let pollTimer = null;
 let activeCapMonth = null;
+let formOpen = false;
 let gsUrl = '';
 let gsUser = localStorage.getItem('ai_merch_gs_user') || 'User';
 let syncEnabled = false;
@@ -2058,6 +2059,9 @@ function startRealtime(){
         });
       }
       if(changed){save();saveSamples();renderList();updateStat();
+        // Skip re-render if a form or modal is open
+        const _anyModal = document.querySelector('[style*="z-index: 1000"],[style*="z-index:1000"],[style*="z-index: 1001"],[style*="z-index:1001"]');
+        if(formOpen || _anyModal) return;
         // Save scroll position before re-render
         const _panel = document.getElementById('mainPanel');
         const _scrollEl = _panel ? (_panel.querySelector('.tasks-scroll') || _panel) : null;
@@ -2777,11 +2781,11 @@ function showEditOrder(idx){
   };
 }
 
-function showAddOrderPanel(){
+function showAddOrderPanel(){ formOpen = true;
   if(currentRole !== 'admin'){ addMsg('assistant','⛔ Only admin can add orders.'); return; }
   const panel=document.getElementById('mainPanel');
   if(activeTab!=='orders') switchTab('orders');
-  panel.innerHTML='<div class="main-header" style="flex-shrink:0"><div style="display:flex;justify-content:space-between;align-items:center"><h2>Add New Order</h2><button onclick="renderOrder()" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:13px;font-family:inherit">← Cancel</button></div><p>Fill in the details — all 26 tasks will be created automatically</p></div>'+
+  panel.innerHTML='<div class="main-header" style="flex-shrink:0"><div style="display:flex;justify-content:space-between;align-items:center"><h2>Add New Order</h2><button onclick="formOpen=false;renderOrder()" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:13px;font-family:inherit">← Cancel</button></div><p>Fill in the details — all 26 tasks will be created automatically</p></div>'+
     '<div class="tasks-scroll"><div style="background:var(--white);border:1.5px solid var(--border);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow)">'+
     '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:12px">'+
     '<div><label class="s-label">Style Name *</label><input id="ao-style" class="s-input" placeholder="e.g. NOVA"></div>'+
@@ -2813,7 +2817,7 @@ function submitNewOrder(){
   const ids=orders.map(o=>parseInt(o.flowId)).filter(n=>!isNaN(n));
   const newId=String(Math.max(...ids,1000)+1);
   const newOrder={flowId:newId,po:(document.getElementById('ao-po').value||'TBD').trim(),style,color,product:(document.getElementById('ao-product').value||'').trim(),buyer,season:(document.getElementById('ao-season').value||'').trim(),qty:parseInt(document.getElementById('ao-qty').value)||0,deadline:ef,exFactory:ef,orderDate:odate,merchant:(document.getElementById('ao-merchant').value||'').trim(),remarks:'',tasks};
-  orders.unshift(newOrder); selectedIdx=0; save(); renderList(); renderOrder();
+  orders.unshift(newOrder); selectedIdx=0; formOpen=false; save(); renderList(); renderOrder();
   if(syncEnabled) sbUpsertOrder(newOrder).catch(()=>{});
   addMsg('assistant','✅ Order added! Flow #'+newId+' — '+style+' '+color+'\n\nClick 📅 Auto TNA to fill all planned dates automatically.');
 }

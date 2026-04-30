@@ -2045,9 +2045,23 @@ function startRealtime(){
         if(!localById[fresh.flowId]){orders.push(fresh);changed=true;}
         else{
           const local=localById[fresh.flowId];
-          TASK_COLS.forEach(t=>{if(fresh.tasks[t]&&!local.tasks[t]){local.tasks[t]=fresh.tasks[t];changed=true;}});
-          if(fresh.tasks['Order Completed']){local.tasks['Order Completed']=fresh.tasks['Order Completed'];changed=true;}
-          if(fresh.taskAWB)Object.entries(fresh.taskAWB).forEach(([k,v])=>{if(v&&!local.taskAWB?.[k]){if(!local.taskAWB)local.taskAWB={};local.taskAWB[k]=v;changed=true;}});
+          // Always trust Supabase (remote) as source of truth
+          TASK_COLS.forEach(t=>{
+            const remoteVal = fresh.tasks[t];
+            const localVal  = local.tasks[t];
+            if(remoteVal !== localVal){
+              local.tasks[t] = remoteVal;
+              changed = true;
+            }
+          });
+          // Sync metadata fields too
+          ['style','color','product','buyer','season','qty','deadline','exFactory','po','merchant','remarks'].forEach(f=>{
+            if(fresh[f] !== undefined && fresh[f] !== local[f]){ local[f]=fresh[f]; changed=true; }
+          });
+          if(fresh.taskAWB)Object.entries(fresh.taskAWB).forEach(([k,v])=>{
+            if(!local.taskAWB)local.taskAWB={};
+            if(v !== local.taskAWB[k]){local.taskAWB[k]=v;changed=true;}
+          });
         }
       });
       if(srows&&srows.length){
@@ -2055,7 +2069,7 @@ function startRealtime(){
         srows.forEach(r=>{
           const fresh=rowToSample(r);
           if(!lsById[fresh.id]){samples.push(fresh);changed=true;}
-          else{const loc=lsById[fresh.id];const p=loc.photo||'';Object.assign(loc,fresh);if(p)loc.photo=p;}
+          else{const loc=lsById[fresh.id];const p=loc.photo||'';Object.assign(loc,fresh);if(p)loc.photo=p;changed=true;}
         });
       }
       if(changed){save();saveSamples();renderList();updateStat();

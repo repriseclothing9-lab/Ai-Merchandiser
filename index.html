@@ -640,6 +640,7 @@ body.role-admin div.admin-only{display:block !important}
     <span class="sync-tag" id="syncTag">LOCAL ONLY</span>
     <span style="flex:1"></span>
     <button class="btn" id="syncBtn" style="font-size:11px;padding:3px 10px" onclick="manualSync()">&#8635; Sync</button>
+    <button class="btn" style="font-size:11px;padding:3px 10px;background:#c0392b;color:#fff;border:none" onclick="forceReloadFromDB()" title="Wipe local cache and reload everything from Supabase">&#9888; Force Reload</button>
     <button class="btn" style="font-size:11px;padding:3px 10px" onclick="showSyncModal()">&#128100; Set Name</button>
       <button class="btn" style="font-size:11px;padding:3px 10px;background:rgba(255,255,255,.06);color:#aaa" onclick="logout()" title="Sign out">Sign Out</button>
   </div>
@@ -2068,6 +2069,31 @@ function startRealtime(){
   },5000);
 }
 
+async function forceReloadFromDB(){
+  if(!sbEnabled){ alert('Not connected to Supabase. Please connect first.'); return; }
+  if(!confirm('This will clear your local cache and reload everything fresh from Supabase. Continue?')) return;
+  // Wipe localStorage completely
+  try{ localStorage.removeItem(STORAGE_KEY); }catch(e){}
+  try{ localStorage.removeItem(STORAGE_KEY+'_samples'); }catch(e){}
+  setSyncUI('Force reloading...', false, true);
+  try{
+    const [rows,srows] = await Promise.all([sbGetOrders(), sbGetSamples()]);
+    if(!rows||!rows.length){ addMsg('assistant','⚠️ Supabase returned no orders. Check connection.'); return; }
+    orders = rows.map(r => rowToOrder(r));
+    if(srows&&srows.length){ samples = srows.map(r => rowToSample(r)); }
+    save(); saveSamples();
+    renderList(); renderOrder(); updateStat();
+    setSyncUI('Connected — '+gsUser, true, false);
+    addMsg('assistant','✅ Force reload complete!
+
+'+orders.length+' orders loaded fresh from Supabase.
+Local cache cleared and replaced.');
+  }catch(e){
+    addMsg('assistant','❌ Force reload failed: '+e.message);
+    setSyncUI('Error', false, false);
+  }
+}
+
 async function manualSync(){
   if(!sbEnabled){
     addMsg('assistant','🔄 Retrying Supabase connection...');
@@ -2078,16 +2104,11 @@ async function manualSync(){
   try{
     const [rows,srows]=await Promise.all([sbGetOrders(),sbGetSamples()]);
     if(rows&&rows.length){
-      const localById={};orders.forEach(o=>localById[o.flowId]=o);
-      orders=rows.map(r=>{
-        const o=rowToOrder(r);
-        const local=localById[o.flowId];
-        if(local){
-          if(local.tasks['Order Completed']&&!o.tasks['Order Completed'])o.tasks['Order Completed']=local.tasks['Order Completed'];
-          if(local.taskAWB)o.taskAWB={...o.taskAWB,...local.taskAWB};
-        }
-        return o;
-      });
+      // Always trust Supabase completely
+      orders = rows.map(r => rowToOrder(r));
+      console.log('[Sync] Loaded',orders.length,'orders from Supabase');
+      const sample = orders[0];
+      if(sample){ const done = TASK_COLS.filter(t=>sample.tasks[t]).length; console.log('[Sync] First order',sample.flowId,'tasks done:',done); }
     }
     if(srows&&srows.length){
       const lsById={};samples.forEach(s=>lsById[s.id]=s);
@@ -2095,7 +2116,7 @@ async function manualSync(){
     }
     save();saveSamples();renderList();renderOrder();updateStat();
     setSyncUI('Connected — '+gsUser, true, false);
-    addMsg('assistant','✅ Synced from Supabase — '+orders.length+' orders.');
+    addMsg('assistant','✅ Pulled fresh from Supabase — '+orders.length+' orders loaded.');
   }catch(e){
     setSyncUI('Sync failed — '+e.message.slice(0,30), false, false);
     addMsg('assistant','⚠️ Sync failed: '+e.message);

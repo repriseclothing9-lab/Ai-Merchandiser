@@ -1794,8 +1794,7 @@ async function sbREST(path, method='GET', body=null, prefer=null){
   // apikey in URL avoids CORS preflight on iOS Safari
   // For writes: use text/plain content-type to avoid preflight trigger
   const sep = path.includes('?') ? '&' : '?';
-  const cacheBust = (!method || method==='GET') ? '&_ts='+Date.now() : '';
-  const url = SB_URL+'/rest/v1/'+path+sep+'apikey='+SB_KEY+cacheBust;
+  const url = SB_URL+'/rest/v1/'+path+sep+'apikey='+SB_KEY;
   const isGet = !method || method==='GET';
   const opts = { method: method||'GET', cache: 'no-store' };
   if(!isGet && body){

@@ -2084,10 +2084,7 @@ async function forceReloadFromDB(){
     save(); saveSamples();
     renderList(); renderOrder(); updateStat();
     setSyncUI('Connected — '+gsUser, true, false);
-    addMsg('assistant','✅ Force reload complete!
-
-'+orders.length+' orders loaded fresh from Supabase.
-Local cache cleared and replaced.');
+    addMsg('assistant','✅ Force reload complete! '+orders.length+' orders loaded fresh from Supabase. Local cache cleared.');
   }catch(e){
     addMsg('assistant','❌ Force reload failed: '+e.message);
     setSyncUI('Error', false, false);

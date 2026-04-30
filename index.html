@@ -1793,9 +1793,10 @@ async function sbREST(path, method='GET', body=null, prefer=null){
   // apikey in URL avoids CORS preflight on iOS Safari
   // For writes: use text/plain content-type to avoid preflight trigger
   const sep = path.includes('?') ? '&' : '?';
-  const url = SB_URL+'/rest/v1/'+path+sep+'apikey='+SB_KEY;
+  const cacheBust = (!method || method==='GET') ? '&_ts='+Date.now() : '';
+  const url = SB_URL+'/rest/v1/'+path+sep+'apikey='+SB_KEY+cacheBust;
   const isGet = !method || method==='GET';
-  const opts = { method: method||'GET' };
+  const opts = { method: method||'GET', cache: 'no-store' };
   if(!isGet && body){
     // Send as text/plain to avoid triggering CORS preflight
     // Supabase accepts this with apikey in URL
@@ -2093,7 +2094,7 @@ function startRealtime(){
         });
       }
     }catch(e){}
-  },10000);
+  },5000);
 }
 
 async function manualSync(){

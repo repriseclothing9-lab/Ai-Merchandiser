@@ -1947,49 +1947,20 @@ async function sbInit(){
       const sbById={};
       rows.forEach(r=>sbById[r.flow_id]=r);
 
-      orders = rows.map(r=>{
-        const o=rowToOrder(r);
-        const local=localById[o.flowId];
-        if(local){
-          if(local.tasks['Order Completed']&&!o.tasks['Order Completed'])
-            o.tasks['Order Completed']=local.tasks['Order Completed'];
-          if(local.taskAWB&&Object.keys(local.taskAWB).length)
-            o.taskAWB={...o.taskAWB,...local.taskAWB};
-        }
-        return o;
-      });
+      // Supabase is source of truth — use Supabase data directly
+      orders = rows.map(r => rowToOrder(r));
 
-      // Push any orders missing from Supabase
+      // Supabase is source of truth — only push orders that are NEW locally (not in Supabase at all)
       const allLocal=(()=>{try{const s=localStorage.getItem(STORAGE_KEY);if(s){const p=JSON.parse(s);if(p&&p.length>0)return p;}}catch(e){}return ORDERS_DATA;})();
       const missing=allLocal.filter(od=>!sbById[od.flowId]);
-      const stale=orders.filter(sbO=>{
-        const loc=allLocal.find(l=>l.flowId===sbO.flowId);
-        if(!loc||!loc.tasks)return false;
-        const sbDone=TASK_COLS.filter(t=>sbO.tasks[t]&&!String(sbO.tasks[t]).includes('(planned)')).length;
-        const lDone=TASK_COLS.filter(t=>loc.tasks[t]&&!String(loc.tasks[t]).includes('(planned)')).length;
-        return lDone>sbDone;
-      });
-      const toSync=[...missing,...stale.map(o=>allLocal.find(l=>l.flowId===o.flowId)).filter(Boolean)];
-      const unique=[...new Map(toSync.map(o=>[o.flowId,o])).values()];
-      if(unique.length>0){
-        setSyncUI('Restoring '+unique.length+' orders...', false, true);
-        for(const od of unique){
+      if(missing.length>0){
+        setSyncUI('Pushing '+missing.length+' new orders...', false, true);
+        for(const od of missing){
           const full={...od,tasks:od.tasks||{},taskAWB:od.taskAWB||{},remarks:od.remarks||'',delayReasons:od.delayReasons||{}};
           TASK_COLS.forEach(t=>{if(full.tasks[t]===undefined)full.tasks[t]=null;});
-          // For first push, try PATCH first, if 0 rows fall back to POST
-      try { await sbPatch('orders?flow_id=eq.'+encodeURIComponent(full.flowId), {
-        flow_id:full.flowId, po:full.po||'', style:full.style||'', color:full.color||'',
-        product:full.product||'', buyer:full.buyer||'', season:full.season||'',
-        qty:parseInt(full.qty)||0, deadline:full.deadline||null, ex_factory:full.exFactory||null,
-        order_date:full.orderDate||null, merchant:full.merchant||'',
-        tasks:JSON.parse(JSON.stringify(full.tasks||{})),
-        task_awb:JSON.parse(JSON.stringify(full.taskAWB||{})),
-        remarks:full.remarks||'', delay_reasons:JSON.parse(JSON.stringify(full.delayReasons||{}))
-      }); } catch(e2) { console.warn('First push failed:', e2.message); }
-          const idx2=orders.findIndex(o=>o.flowId===full.flowId);
-          if(idx2>=0)orders[idx2]=full; else orders.push(full);
+          try { await sbUpsertOrder(full); } catch(e2){ console.warn('Push new order failed:', e2.message); }
+          orders.push(full);
         }
-        addMsg('assistant','✅ Synced '+unique.length+' orders to Supabase.');
       }
     } else {
       const allLocal=(()=>{try{const s=localStorage.getItem(STORAGE_KEY);if(s){const p=JSON.parse(s);if(p&&p.length>0)return p;}}catch(e){}return ORDERS_DATA;})();

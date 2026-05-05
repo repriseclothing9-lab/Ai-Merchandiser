@@ -1886,8 +1886,8 @@ async function sbUpsertOrder(o){
       remarks:o.remarks||'',
       delay_reasons:JSON.parse(JSON.stringify(o.delayReasons||{}))
     };
-    // PATCH updates existing row by primary key — avoids 409 conflict
-    await sbPatch('orders?flow_id=eq.'+encodeURIComponent(o.flowId), row);
+    // POST with upsert — inserts new rows AND updates existing ones
+    await sbWrite('orders?on_conflict=flow_id', row, 'resolution=merge-duplicates,return=minimal');
   }catch(e){ console.warn('sbUpsertOrder:', e.message); }
 }
 

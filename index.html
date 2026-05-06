@@ -1160,7 +1160,7 @@ function saveRemarks(idx, text){
   if(!orders[idx]) return;
   orders[idx].remarks = text;
   save();
-  if(syncEnabled && gsUrl) pushTask(orders[idx].flowId, 'Remarks', text).catch(()=>{});
+  if(syncEnabled) pushTask(orders[idx].flowId, 'Remarks', text).catch(()=>{});
 }
 
 function toggleTask(idx, taskName) {
@@ -1193,7 +1193,7 @@ function toggleTask(idx, taskName) {
             o.delayReasons[taskName] = {reason, daysLate, date: completionTime.slice(0,10)};
           }
           save(); renderOrderKeepScroll(); renderList();
-          if(syncEnabled && gsUrl) pushTask(o.flowId, taskName, o.tasks[taskName]||'');
+          if(syncEnabled) pushTask(o.flowId, taskName, o.tasks[taskName]||'');
         });
         return; // Wait for modal response
       }
@@ -1203,7 +1203,7 @@ function toggleTask(idx, taskName) {
   save();
   renderOrderKeepScroll();
   renderList();
-  if(syncEnabled && gsUrl) pushTask(o.flowId, taskName, o.tasks[taskName]||'');
+  if(syncEnabled) pushTask(o.flowId, taskName, o.tasks[taskName]||'');
   // Log activity
   const _logVal = o.tasks[taskName];
   logActivity(_logVal ? 'TASK_DONE' : 'TASK_UNDONE',

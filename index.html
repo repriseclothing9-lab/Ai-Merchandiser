@@ -2017,11 +2017,14 @@ function startRealtime(){
         if(!localById[fresh.flowId]){orders.push(fresh);changed=true;}
         else{
           const local=localById[fresh.flowId];
-          // Always trust Supabase (remote) as source of truth
+          // Trust Supabase, BUT never overwrite a local completion with remote null
+          // (handles race condition where save hasn't propagated yet)
           TASK_COLS.forEach(t=>{
             const remoteVal = fresh.tasks[t];
             const localVal  = local.tasks[t];
             if(remoteVal !== localVal){
+              // If remote is null but local has a real completion date, keep local
+              if(!remoteVal && localVal && !String(localVal).includes('(planned)')) return;
               local.tasks[t] = remoteVal;
               changed = true;
             }
